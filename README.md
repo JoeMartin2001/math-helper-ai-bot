@@ -51,12 +51,27 @@ To run the function locally against a test bot:
 2. Expose port 54321 with a tunnel such as `ngrok`.
 3. Point the webhook at `https://<tunnel>/functions/v1/telegram-bot`.
 
+## Admin panel (inside Telegram)
+Only chats an admin has approved can use the bot, so strangers can't spend your API credits.
+
+1. Set `ADMIN_USER_IDS` to your Telegram user id. You can get it from @userinfobot.
+2. Open a private chat with the bot and send `/start`. Bots can't message you first, so this step is required for approval requests to reach you.
+
+| What happens | Result |
+|---|---|
+| Someone adds the bot to a group, or a stranger writes to it in private | The chat is **pending**. The bot says once a day that it's awaiting approval, and you get a message with **✅ Ruxsat berish / ⛔ Bloklash** buttons |
+| You approve | The bot announces itself in the group and starts answering |
+| You block | The bot says it's been switched off there and then ignores the chat. A blocked group that re-adds the bot gets no reply |
+| An admin adds the bot, or uses it in a new chat | Approved automatically |
+| `/groups` (admins, private chat) | Lists every chat with its status and solved problems over 7 days, plus buttons to approve or block. Pages hold 8 chats |
+| The group is upgraded to a supergroup (its id changes) | The approval carries over automatically |
+
 ## Configuration
 | Secret | Default | Purpose |
 |---|---|---|
 | `RATE_LIMIT_PER_HOUR` | 10 | Per-user limit. Failed requests don't count against the user |
 | `DAILY_REQUEST_LIMIT` | 300 | Global 24h cap across all chats |
-| `ALLOWED_CHAT_IDS` | *(any)* | Comma-separated allowlist. **Recommended:** without it, anyone can add the bot to their group and spend your API credits. A blocked chat gets one message showing its id |
+| `ADMIN_USER_IDS` | *(none)* | Comma-separated Telegram user ids allowed to approve/block chats. **Required:** with no admins, every new chat stays pending |
 | `SOLVE_TIMEOUT_SECONDS` | 120 | When to give up and tell the user. Keep it below the wall-clock limit |
 
 ## Notes

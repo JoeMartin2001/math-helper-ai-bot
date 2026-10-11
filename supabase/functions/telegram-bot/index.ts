@@ -1,6 +1,7 @@
 // Telegram webhook: acknowledges updates immediately and solves math problems in the background.
 
 import Anthropic from "@anthropic-ai/sdk";
+import { AdminPanel } from "./admin.ts";
 import {
   alreadyNotified,
   checkRateLimit,
@@ -26,9 +27,9 @@ const BOT_USERNAME = Deno.env.get("BOT_USERNAME")!.replace(/^@/, "");
 const RATE_LIMIT_PER_HOUR = Number(Deno.env.get("RATE_LIMIT_PER_HOUR") ?? "10");
 // Global cap on solved problems per 24h across all chats, to bound API spend.
 const DAILY_REQUEST_LIMIT = Number(Deno.env.get("DAILY_REQUEST_LIMIT") ?? "300");
-// Comma-separated chat ids allowed to use the bot; empty means every chat.
-const ALLOWED_CHAT_IDS = new Set(
-  (Deno.env.get("ALLOWED_CHAT_IDS") ?? "").split(",").map((s) => s.trim()).filter(Boolean).map(Number),
+// Comma-separated Telegram user ids who approve/block chats (from the bot's private chat).
+const ADMIN_USER_IDS = new Set(
+  (Deno.env.get("ADMIN_USER_IDS") ?? "").split(",").map((s) => s.trim()).filter(Boolean).map(Number),
 );
 // Must stay below the Edge Function wall-clock limit (150s free plan, 400s paid) so we can still
 // tell the user something went wrong before the worker is killed.
@@ -38,8 +39,6 @@ const SOLVE_TIMEOUT_MS = Number(Deno.env.get("SOLVE_TIMEOUT_SECONDS") ?? "120") 
 const MAX_IMAGE_BYTES = 3.75 * 1024 * 1024;
 const MINUTE = 60 * 1000;
 
-const tg = new TelegramClient(BOT_TOKEN);
-
 const MSG = {
   usage: `Salom! Men matematik masalalarni bosqichma-bosqich yechib beraman.\n\n` +
     `• Masala rasmini yuboring va izohda meni belgilang: @${BOT_USERNAME}\n` +
@@ -48,8 +47,6 @@ const MSG = {
   working: "⏳ Yechilmoqda...",
   rateLimited: (minutes: number) =>
     `Siz bir soat ichida juda ko'p so'rov yubordingiz (${RATE_LIMIT_PER_HOUR} ta). Taxminan ${minutes} daqiqadan keyin qayta urinib ko'ring.`,
-  notAllowed: (chatId: number) =>
-    `Bu chatda bot hali yoqilmagan. Bot egasiga ushbu chat raqamini yuboring: ${chatId}`,
   overBudget: "Bugungi so'rovlar limiti tugadi. Iltimos, ertaga qayta urinib ko'ring.",
   badImage: "Bu rasm formatini o'qiy olmayman. Iltimos, rasmni oddiy surat (JPG/PNG) sifatida yuboring.",
   tooLarge: "Rasm juda katta. Iltimos, uni oddiy surat sifatida (fayl emas) yuboring.",
@@ -60,6 +57,9 @@ const MSG = {
   busy: "Hozir so'rovlar juda ko'p. Iltimos, bir necha daqiqadan keyin qayta urinib ko'ring.",
   failed: "Kechirasiz, xatolik yuz berdi. Iltimos, birozdan keyin qayta urinib ko'ring.",
 };
+
+const tg = new TelegramClient(BOT_TOKEN);
+const admin = new AdminPanel(tg, ADMIN_USER_IDS, MSG.usage);
 
 Deno.serve(async (req) => {
   if (req.method !== "POST") return new Response("ok");
@@ -74,15 +74,23 @@ Deno.serve(async (req) => {
     return new Response("bad request", { status: 400 });
   }
 
-  const msg = update.message;
-  if (msg && senderOf(msg) && isAddressed(msg, BOT_USERNAME)) {
-    // Ack now so Telegram doesn't retry while Claude is thinking; keep working after the response.
-    EdgeRuntime.waitUntil(
-      handle(update.update_id, msg).catch((err) => console.error("Unhandled error", update.update_id, err)),
-    );
+  // Ack now so Telegram doesn't retry while we work (Claude can take a while); finish in the background.
+  const work = route(update);
+  if (work) {
+    EdgeRuntime.waitUntil(work.catch((err) => console.error("Unhandled error", update.update_id, err)));
   }
   return new Response("ok");
 });
+
+function route(update: Update): Promise<void> | null {
+  if (update.callback_query) return admin.onCallback(update.callback_query);
+  if (update.my_chat_member) return admin.onMembership(update.my_chat_member);
+  const msg = update.message;
+  if (!msg) return null;
+  if (msg.migrate_from_chat_id) return admin.onMigration(msg);
+  if (senderOf(msg) && isAddressed(msg, BOT_USERNAME)) return handle(update.update_id, msg);
+  return null;
+}
 
 async function handle(updateId: number, msg: Message): Promise<void> {
   const chatId = msg.chat.id;
@@ -91,9 +99,12 @@ async function handle(updateId: number, msg: Message): Promise<void> {
   const target: Target = { chatId, threadId: msg.is_topic_message ? msg.message_thread_id : undefined };
   const send = (text: string) => tg.sendMessage(target, text, { replyTo: msg.message_id });
 
+  if (await admin.onCommand(msg, sender.id)) return;
+  if (!await admin.checkAccess(msg, sender)) return;
+
   const request = buildRequest(msg, BOT_USERNAME);
   if (request.kind === "help") {
-    await send(MSG.usage);
+    await send(admin.helpFor(sender.id));
     return;
   }
 
@@ -133,15 +144,6 @@ async function handle(updateId: number, msg: Message): Promise<void> {
   };
 
   try {
-    if (ALLOWED_CHAT_IDS.size > 0 && !ALLOWED_CHAT_IDS.has(chatId)) {
-      console.warn("Chat not in ALLOWED_CHAT_IDS", chatId, msg.chat.type);
-      if (!await alreadyNotified({ chatId }, "not_allowed", 24 * 60 * MINUTE, rowId)) {
-        await notify(MSG.notAllowed(chatId));
-      }
-      await finish(rowId, "not_allowed");
-      return;
-    }
-
     if (await dailyCount() > DAILY_REQUEST_LIMIT) {
       console.warn("Daily request limit reached", DAILY_REQUEST_LIMIT);
       if (!await alreadyNotified({ chatId }, "over_budget", 60 * MINUTE, rowId)) {

@@ -26,11 +26,19 @@ export interface User {
   is_bot: boolean;
 }
 
+export interface Chat {
+  id: number;
+  type: string; // private | group | supergroup | channel
+  title?: string;
+  username?: string;
+  first_name?: string;
+}
+
 export interface Message {
   message_id: number;
   message_thread_id?: number;
   is_topic_message?: boolean;
-  chat: { id: number; type: string };
+  chat: Chat;
   from?: User;
   /** Set when an anonymous group admin (or a channel) posts on behalf of the chat. */
   sender_chat?: { id: number; type: string };
@@ -44,11 +52,39 @@ export interface Message {
   reply_to_message?: Message;
   /** The part of the replied-to message the user selected when replying. */
   quote?: { text: string };
+  /** Service message in a group that was upgraded to a supergroup: the supergroup's id. */
+  migrate_to_chat_id?: number;
+  /** Service message in the new supergroup: the old group's id. */
+  migrate_from_chat_id?: number;
 }
+
+export interface ChatMemberUpdated {
+  chat: Chat;
+  from: User;
+  old_chat_member: { status: string; user: User };
+  new_chat_member: { status: string; user: User };
+}
+
+export interface CallbackQuery {
+  id: string;
+  from: User;
+  message?: Message;
+  data?: string;
+}
+
+export interface InlineButton {
+  text: string;
+  callback_data: string;
+}
+
+export type InlineKeyboard = InlineButton[][];
 
 export interface Update {
   update_id: number;
   message?: Message;
+  /** The bot's own membership changed in a chat (added, removed, promoted). */
+  my_chat_member?: ChatMemberUpdated;
+  callback_query?: CallbackQuery;
 }
 
 export class TelegramError extends Error {
@@ -103,13 +139,14 @@ export class TelegramClient {
   sendMessage(
     to: Target,
     text: string,
-    opts: { replyTo?: number; entities?: MessageEntity[] } = {},
+    opts: { replyTo?: number; entities?: MessageEntity[]; keyboard?: InlineKeyboard } = {},
   ): Promise<Message> {
     return this.call<Message>("sendMessage", {
       chat_id: to.chatId,
       ...(to.threadId ? { message_thread_id: to.threadId } : {}),
       text,
       ...(opts.entities?.length ? { entities: opts.entities } : {}),
+      ...(opts.keyboard ? { reply_markup: { inline_keyboard: opts.keyboard } } : {}),
       ...(opts.replyTo
         ? { reply_parameters: { message_id: opts.replyTo, allow_sending_without_reply: true } }
         : {}),
@@ -122,14 +159,24 @@ export class TelegramClient {
     messageId: number,
     text: string,
     entities?: MessageEntity[],
+    keyboard?: InlineKeyboard,
   ): Promise<unknown> {
     return this.call("editMessageText", {
       chat_id: chatId,
       message_id: messageId,
       text,
       ...(entities?.length ? { entities } : {}),
+      ...(keyboard ? { reply_markup: { inline_keyboard: keyboard } } : {}),
       link_preview_options: { is_disabled: true },
     });
+  }
+
+  answerCallbackQuery(id: string, text?: string): Promise<unknown> {
+    return this.call("answerCallbackQuery", { callback_query_id: id, ...(text ? { text } : {}) });
+  }
+
+  getChatMemberCount(chatId: number): Promise<number> {
+    return this.call<number>("getChatMemberCount", { chat_id: chatId });
   }
 
   deleteMessage(chatId: number, messageId: number): Promise<unknown> {

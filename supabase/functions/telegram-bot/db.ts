@@ -203,3 +203,138 @@ export async function finish(
     .eq("id", id);
   if (error) console.error("Failed to update request row", id, error);
 }
+
+// ---- Chats: which groups/private chats may use the bot ----
+
+export type ChatStatus = "pending" | "approved" | "blocked";
+
+export interface ChatRow {
+  id: number;
+  type: string;
+  title: string | null;
+  status: ChatStatus;
+  is_member: boolean;
+  added_by_id: number | null;
+  added_by_username: string | null;
+  created_at: string;
+}
+
+const CHAT_COLUMNS = "id, type, title, status, is_member, added_by_id, added_by_username, created_at";
+
+export async function getChat(id: number): Promise<ChatRow | null> {
+  const { data, error } = await supabase.from("chats").select(CHAT_COLUMNS).eq("id", id).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Records a chat the bot hasn't seen before. Returns the stored row and whether this call created
+ * it, so only one of several concurrent updates notifies the admins.
+ */
+export async function registerChat(chat: {
+  id: number;
+  type: string;
+  title: string | null;
+  status: ChatStatus;
+  addedBy?: { id: number; username?: string };
+}): Promise<{ row: ChatRow; created: boolean }> {
+  const { data, error } = await supabase
+    .from("chats")
+    .insert({
+      id: chat.id,
+      type: chat.type,
+      title: chat.title,
+      status: chat.status,
+      added_by_id: chat.addedBy?.id ?? null,
+      added_by_username: chat.addedBy?.username ?? null,
+      ...(chat.status !== "pending" && chat.addedBy
+        ? { decided_by: chat.addedBy.id, decided_at: new Date().toISOString() }
+        : {}),
+    })
+    .select(CHAT_COLUMNS)
+    .single();
+  if (!error) return { row: data, created: true };
+  if (error.code !== "23505") throw error;
+  return { row: (await getChat(chat.id))!, created: false };
+}
+
+export async function updateChat(
+  id: number,
+  patch: Partial<Pick<ChatRow, "title" | "type" | "is_member">> & {
+    added_by_id?: number | null;
+    added_by_username?: string | null;
+  },
+): Promise<void> {
+  const { error } = await supabase.from("chats").update(patch).eq("id", id);
+  if (error) throw error;
+}
+
+export async function setChatStatus(
+  id: number,
+  status: ChatStatus,
+  adminId: number,
+): Promise<ChatRow | null> {
+  const { data, error } = await supabase
+    .from("chats")
+    .update({ status, decided_by: adminId, decided_at: new Date().toISOString() })
+    .eq("id", id)
+    .select(CHAT_COLUMNS)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+/** Returns true (and records it) if the chat hasn't been told "awaiting approval" in the last day. */
+export async function claimPendingNotice(id: number): Promise<boolean> {
+  const dayAgo = new Date(Date.now() - 24 * HOUR).toISOString();
+  const { data, error } = await supabase
+    .from("chats")
+    .update({ pending_notice_at: new Date().toISOString() })
+    .eq("id", id)
+    .or(`pending_notice_at.is.null,pending_notice_at.lt.${dayAgo}`)
+    .select("id");
+  if (error) throw error;
+  return data.length > 0;
+}
+
+/** Carries a group's settings over when Telegram upgrades it to a supergroup (which gets a new id). */
+export async function migrateChat(
+  oldId: number,
+  newChat: { id: number; type: string; title: string | null },
+) {
+  const old = await getChat(oldId);
+  if (!old) return;
+  const { error } = await supabase.from("chats").upsert({
+    id: newChat.id,
+    type: newChat.type,
+    title: newChat.title ?? old.title,
+    status: old.status,
+    added_by_id: old.added_by_id,
+    added_by_username: old.added_by_username,
+  });
+  if (error) throw error;
+  await supabase.from("chats").update({ migrated_to: newChat.id, is_member: false }).eq("id", oldId);
+}
+
+export interface ChatListItem extends ChatRow {
+  solved7d: number;
+}
+
+/** All chats (except ones migrated away), pending first, then approved, then blocked. */
+export async function listChats(): Promise<ChatListItem[]> {
+  const { data: chats, error } = await supabase
+    .from("chats")
+    .select(CHAT_COLUMNS)
+    .is("migrated_to", null)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+
+  const { data: usage, error: usageError } = await supabase.from("chat_usage").select("chat_id, solved_7d");
+  if (usageError) throw usageError;
+  const solved = new Map(usage.map((u) => [u.chat_id, u.solved_7d]));
+
+  const rank: Record<ChatStatus, number> = { pending: 0, approved: 1, blocked: 2 };
+  return (chats as ChatRow[])
+    .map((c) => ({ ...c, solved7d: (solved.get(c.id) as number | undefined) ?? 0 }))
+    .sort((a, b) => rank[a.status] - rank[b.status] || b.solved7d - a.solved7d);
+}
