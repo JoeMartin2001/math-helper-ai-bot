@@ -1,0 +1,205 @@
+// Usage log, rate limiting and de-duplication backed by the `requests` table.
+
+import { createClient } from "@supabase/supabase-js";
+
+// SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are injected into every edge function.
+const supabase = createClient(
+  Deno.env.get("SUPABASE_URL")!,
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  { auth: { persistSession: false } },
+);
+
+export type Status = "processing" | "done" | "error" | "rate_limited" | "not_allowed" | "over_budget";
+
+const HOUR = 60 * 60 * 1000;
+// A row still "processing" after this long belongs to a worker that was killed (e.g. wall-clock limit).
+const STALE_AFTER_MS = 15 * 60 * 1000;
+
+export interface NewRequest {
+  updateId: number;
+  chatId: number;
+  userId: number;
+  username?: string;
+  question: string;
+  image: { fileId: string; mimeType: string } | null;
+  parentId: number | null;
+  status?: Status;
+}
+
+/** One answered exchange of a conversation, as stored. */
+export interface Turn {
+  id: number;
+  question: string;
+  image: { fileId: string; mimeType: string } | null;
+  answer: string;
+}
+
+// How many earlier exchanges a follow-up sees (oldest dropped first).
+const MAX_THREAD_TURNS = 5;
+
+/**
+ * Inserts the request row. Returns its id, or null if this update was already
+ * claimed (Telegram re-delivered it).
+ */
+export async function claimUpdate(req: NewRequest): Promise<number | null> {
+  const { data, error } = await supabase
+    .from("requests")
+    .insert({
+      update_id: req.updateId,
+      chat_id: req.chatId,
+      user_id: req.userId,
+      username: req.username ?? null,
+      question: req.question,
+      has_image: req.image !== null,
+      image_file_id: req.image?.fileId ?? null,
+      image_mime: req.image?.mimeType ?? null,
+      parent_id: req.parentId,
+      status: req.status ?? "processing",
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    if (error.code === "23505") return null; // unique_violation on update_id
+    throw error;
+  }
+  return data.id;
+}
+
+/** Marks requests whose worker died mid-flight as errors, so they stop looking in-progress. */
+export async function sweepStale(): Promise<void> {
+  const { error } = await supabase
+    .from("requests")
+    .update({ status: "error", error: "abandoned: worker stopped before finishing" })
+    .eq("status", "processing")
+    .lt("created_at", new Date(Date.now() - STALE_AFTER_MS).toISOString());
+  if (error) console.error("Failed to sweep stale requests", error);
+}
+
+/**
+ * Counts the user's answered/in-flight requests in the past hour (excluding `excludeId`).
+ * Failed requests don't count against the user. Returns null when under the limit,
+ * otherwise the minutes until a slot frees up.
+ */
+export async function checkRateLimit(
+  userId: number,
+  limit: number,
+  excludeId: number,
+): Promise<number | null> {
+  const { data, error } = await supabase
+    .from("requests")
+    .select("created_at")
+    .eq("user_id", userId)
+    .neq("id", excludeId)
+    .in("status", ["processing", "done"])
+    .gte("created_at", new Date(Date.now() - HOUR).toISOString())
+    .order("created_at", { ascending: true });
+
+  if (error) throw error;
+  if (data.length < limit) return null;
+
+  // The oldest request in the window that must expire before the user is under the limit again.
+  const oldest = new Date(data[data.length - limit].created_at).getTime();
+  return Math.max(1, Math.ceil((oldest + HOUR - Date.now()) / 60_000));
+}
+
+/** Number of requests answered or in flight across all chats in the past 24 hours. */
+export async function dailyCount(): Promise<number> {
+  const { count, error } = await supabase
+    .from("requests")
+    .select("id", { count: "exact", head: true })
+    .in("status", ["processing", "done"])
+    .gte("created_at", new Date(Date.now() - 24 * HOUR).toISOString());
+  if (error) throw error;
+  return count ?? 0;
+}
+
+/**
+ * Whether a row with `status` already exists for this user or chat within `windowMs`,
+ * other than `excludeId`. Used to send each refusal notice once instead of on every message.
+ */
+export async function alreadyNotified(
+  by: { userId: number } | { chatId: number },
+  status: Status,
+  windowMs: number,
+  excludeId: number,
+): Promise<boolean> {
+  let query = supabase
+    .from("requests")
+    .select("id", { count: "exact", head: true })
+    .eq("status", status)
+    .neq("id", excludeId)
+    .gte("created_at", new Date(Date.now() - windowMs).toISOString());
+  query = "userId" in by ? query.eq("user_id", by.userId) : query.eq("chat_id", by.chatId);
+  const { count, error } = await query;
+  if (error) throw error;
+  return (count ?? 0) > 0;
+}
+
+/**
+ * Finds the answered request whose answer is in Telegram message `messageId` and returns
+ * its conversation, oldest turn first. Returns an empty list if the message isn't a stored answer.
+ */
+export async function loadThread(chatId: number, messageId: number): Promise<Turn[]> {
+  const columns = "id, question, image_file_id, image_mime, answer, parent_id";
+  const { data: found, error } = await supabase
+    .from("requests")
+    .select(columns)
+    .eq("chat_id", chatId)
+    .contains("answer_message_ids", [messageId])
+    .not("answer", "is", null)
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+
+  const turns: Turn[] = [];
+  let row = found;
+  while (row && turns.length < MAX_THREAD_TURNS) {
+    turns.unshift({
+      id: row.id,
+      question: row.question ?? "",
+      image: row.image_file_id
+        ? { fileId: row.image_file_id, mimeType: row.image_mime ?? "image/jpeg" }
+        : null,
+      answer: row.answer,
+    });
+    if (!row.parent_id) break;
+    const { data: parent, error: parentError } = await supabase
+      .from("requests")
+      .select(columns)
+      .eq("id", row.parent_id)
+      .not("answer", "is", null)
+      .maybeSingle();
+    if (parentError) throw parentError;
+    row = parent;
+  }
+  return turns;
+}
+
+export async function finish(
+  id: number,
+  status: Exclude<Status, "processing">,
+  extra: {
+    inputTokens?: number;
+    outputTokens?: number;
+    error?: string;
+    answer?: string;
+    answerMessageIds?: number[];
+    figures?: number;
+  } = {},
+): Promise<void> {
+  const { error } = await supabase
+    .from("requests")
+    .update({
+      status,
+      input_tokens: extra.inputTokens ?? null,
+      output_tokens: extra.outputTokens ?? null,
+      error: extra.error ?? null,
+      answer: extra.answer ?? null,
+      answer_message_ids: extra.answerMessageIds ?? null,
+      figures: extra.figures ?? 0,
+      completed_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (error) console.error("Failed to update request row", id, error);
+}
