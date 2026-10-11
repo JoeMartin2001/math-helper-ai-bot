@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<title>Ustoz AI description</title>
+<link rel="stylesheet" href="brand.css">
+<style>
+  body { --cell: 24px; padding: 34px 34px 26px; display: flex; flex-direction: column; justify-content: space-between; }
+  .top { display: flex; align-items: center; gap: 20px; }
+  .mark { width: 132px; height: 132px; margin: -14px -8px -10px -18px;
+          filter: drop-shadow(0 10px 22px rgba(14, 159, 146, 0.45)); }
+  h1 { font-size: 46px; font-weight: 700; line-height: 1; }
+  h1 .accent { color: var(--teal); }
+  .tagline { margin-top: 10px; font-size: 16.5px; font-weight: 600; line-height: 1.35; color: var(--muted); max-width: 380px; }
+  .tagline b { color: var(--ink); font-weight: 700; }
+  .features { display: flex; gap: 10px; }
+  .feature {
+    flex: 1; display: flex; align-items: center; gap: 9px;
+    padding: 11px 12px; border-radius: 14px;
+    background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.09);
+    font-size: 13.5px; font-weight: 700; line-height: 1.2;
+  }
+  .feature svg { flex: none; width: 26px; height: 26px; }
+  .footer { padding-top: 14px; border-top: 1px solid rgba(255, 255, 255, 0.08); display: flex; justify-content: space-between; align-items: center;
+            font-size: 12.5px; font-weight: 600; color: var(--muted); }
+  .footer b { color: var(--ink); }
+  .glyph.a { font-size: 120px; right: 18px; top: -6px; }
+  .glyph.b { font-size: 70px; left: 250px; bottom: 34px; }
+</style>
+</head>
+<body class="grid">
+  <span class="glyph a">π</span><span class="glyph b">∑</span>
+
+  <div class="top">
+    <img class="mark" src="mark.svg" alt="">
+    <div>
+      <h1 class="display">Ustoz <span class="accent">AI</span></h1>
+      <p class="tagline">Masala rasmini yuboring — <b>yechimini bosqichma-bosqich</b> tushuntirib beraman</p>
+    </div>
+  </div>
+
+  <div class="features">
+    <div class="feature">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#2DD4BF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+      Rasmdan o‘qiydi
+    </div>
+    <div class="feature">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#FFC23D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16"/><path d="M7 16c3-9 6-9 10-4"/></svg>
+      Grafik chizadi
+    </div>
+    <div class="feature">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#7CE38B" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16.5 9"/></svg>
+      Javobni tekshiradi
+    </div>
+  </div>
+
+  <div class="footer">
+    <span><b>Abdulaziz Madg‘oziyev</b> loyihasi</span>
+    <span>Milliy sertifikat tayyorlov</span>
+  </div>
+</body>
+</html>

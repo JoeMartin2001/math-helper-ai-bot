@@ -1,0 +1,62 @@
+@import url("../fonts/fonts.css");
+
+:root {
+  --navy-950: #070F26;
+  --navy-900: #0B1736;
+  --navy-800: #12244F;
+  --navy-700: #1B3268;
+  --teal: #2DD4BF;
+  --teal-deep: #0E9F92;
+  --gold: #FFC23D;
+  --ink: #F4F7FF;
+  --muted: #A9B6D6;
+  --line: rgba(255, 255, 255, 0.08);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body { width: 100%; height: 100%; overflow: hidden; }
+
+body {
+  font-family: "Manrope", system-ui, sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(1200px 700px at 85% -10%, rgba(45, 212, 191, 0.18), transparent 60%),
+    radial-gradient(900px 600px at -10% 110%, rgba(255, 194, 61, 0.10), transparent 60%),
+    linear-gradient(160deg, var(--navy-800), var(--navy-950));
+  -webkit-font-smoothing: antialiased;
+  position: relative;
+}
+
+/* Graph-paper texture, fading out toward the edges */
+.grid::before {
+  content: "";
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: var(--cell, 40px) var(--cell, 40px);
+  mask-image: radial-gradient(ellipse at center, #000 30%, transparent 80%);
+  pointer-events: none;
+}
+
+.display { font-family: "Unbounded", "Manrope", sans-serif; letter-spacing: -0.02em; }
+
+.glyph {
+  position: absolute;
+  font-family: "Unbounded", serif;
+  color: rgba(255, 255, 255, 0.06);
+  font-weight: 600;
+  pointer-events: none;
+  user-select: none;
+}
+
+.accent { color: var(--teal); }
+.gold { color: var(--gold); }
+
+.pill {
+  display: inline-flex; align-items: center; gap: 0.5em;
+  border-radius: 999px;
+  font-weight: 700;
+  white-space: nowrap;
+}

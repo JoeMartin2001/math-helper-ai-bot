@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<title>Ustoz AI guide</title>
+<link rel="stylesheet" href="brand.css">
+<style>
+  body { --cell: 54px; padding: 58px 72px 50px; display: flex; flex-direction: column; }
+  header { display: flex; align-items: center; gap: 26px; }
+  .mark { width: 140px; height: 140px; margin: -18px -14px -14px -26px;
+          filter: drop-shadow(0 14px 30px rgba(14, 159, 146, 0.45)); }
+  .eyebrow { font-size: 22px; font-weight: 800; letter-spacing: 0.14em; color: var(--teal); text-transform: uppercase; }
+  h1 { margin-top: 8px; font-size: 52px; font-weight: 700; line-height: 1.08; }
+
+  .steps { margin-top: 40px; display: flex; flex-direction: column; gap: 16px; }
+  .step {
+    display: grid; grid-template-columns: 68px 1fr; gap: 24px; align-items: start;
+    padding: 24px 28px; border-radius: 28px;
+    background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.09);
+  }
+  .num {
+    width: 68px; height: 68px; border-radius: 20px; display: grid; place-items: center;
+    font-family: "Unbounded"; font-size: 30px; font-weight: 700; color: var(--navy-900);
+    background: linear-gradient(140deg, #3EE6C8, #0E9F92);
+  }
+  .step:nth-child(4) .num { background: linear-gradient(140deg, #FFE08A, #FFB627); }
+  h2 { font-size: 32px; font-weight: 800; line-height: 1.15; }
+  .step p { margin-top: 4px; font-size: 23px; font-weight: 500; line-height: 1.35; color: var(--muted); }
+
+  /* Example messages, styled like Telegram's dark theme bubbles */
+  .bubble {
+    margin-top: 14px; display: inline-flex; align-items: center; gap: 12px;
+    padding: 12px 20px; border-radius: 20px 20px 20px 6px;
+    font-size: 25px; font-weight: 600; line-height: 1.3;
+  }
+  .bubble.me { background: #2B5278; color: #fff; border-radius: 20px 20px 6px 20px; }
+  .bubble.bot { background: rgba(45, 212, 191, 0.14); border: 1px solid rgba(45, 212, 191, 0.35); color: #E9FFFB; }
+  .mention { color: #8CD4FF; font-weight: 700; }
+  .thumb {
+    width: 54px; height: 54px; border-radius: 10px; flex: none; display: grid; place-items: center;
+    background: #F2EFE6; color: #333; font: 700 15px "Manrope"; line-height: 1.1; text-align: center;
+  }
+  .bubble.stack { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .reply { border-left: 4px solid #8CD4FF; padding-left: 12px; font-size: 19px; color: #BFD9F2; line-height: 1.25; }
+  .reply b { display: block; color: #8CD4FF; }
+
+  .tip {
+    margin-top: 18px; display: flex; gap: 16px; align-items: center;
+    padding: 20px 26px; border-radius: 22px;
+    background: rgba(255, 194, 61, 0.10); border: 1px solid rgba(255, 194, 61, 0.30);
+    font-size: 23px; font-weight: 600; line-height: 1.35;
+  }
+  .tip svg { flex: none; width: 38px; height: 38px; }
+
+  footer { margin-top: auto; display: flex; justify-content: space-between; align-items: flex-end;
+           padding-top: 24px; border-top: 1px solid rgba(255, 255, 255, 0.09); }
+  .author { font-size: 26px; font-weight: 800; }
+  .author span { display: block; margin-top: 4px; font-size: 20px; font-weight: 600; color: var(--muted); }
+  .handle { font-size: 22px; font-weight: 700; color: #8CD4FF; }
+
+  .glyph.a { font-size: 300px; right: -10px; top: -40px; }
+  .glyph.b { font-size: 150px; right: 90px; top: 560px; }
+</style>
+</head>
+<body class="grid">
+  <span class="glyph a">√</span><span class="glyph b">∫</span>
+
+  <header>
+    <img class="mark" src="mark.svg" alt="">
+    <div>
+      <div class="eyebrow">Ustoz AI · guruh yordamchisi</div>
+      <h1 class="display">Botdan qanday<br>foydalanish?</h1>
+    </div>
+  </header>
+
+  <section class="steps">
+    <div class="step">
+      <div class="num">1</div>
+      <div>
+        <h2>Masala rasmini yuboring</h2>
+        <p>Rasm izohida botni belgilang</p>
+        <div class="bubble me">
+          <div class="thumb">x²−4x<br>+3=0</div>
+          <span class="mention">@mathustozai_bot</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">2</div>
+      <div>
+        <h2>Nima kerakligini yozing</h2>
+        <p>Qaysi masala yoki faqat javob kerakligini ayting</p>
+        <div class="bubble me"><span><span class="mention">@mathustozai_bot</span> 3-masalani yeching</span></div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">3</div>
+      <div>
+        <h2>Yechimni oling</h2>
+        <p>Bosqichma-bosqich, kerak bo‘lsa grafik va chizma bilan</p>
+        <div class="bubble bot">D = 16 − 12 = 4 &nbsp;→&nbsp; <b>Javob: x₁ = 1, x₂ = 3</b></div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">4</div>
+      <div>
+        <h2>Tushunmadingizmi?</h2>
+        <p>Bot javobiga <b style="color:var(--ink)">reply</b> qilib, qayta so‘rang</p>
+        <div class="bubble me stack">
+          <div class="reply"><b>Ustoz AI</b>Javob: x₁ = 1, x₂ = 3</div>
+          <span>Soddaroq tushuntiring</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="tip">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#FFC23D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.7.6 1.1 1.3 1.1 2.2h5c0-.9.4-1.6 1.1-2.2A6 6 0 0 0 12 3z"/></svg>
+    <span>Rasm aniq va yorug‘ bo‘lsin. Bitta rasmda bitta masala — eng yaxshi natija.</span>
+  </div>
+
+  <footer>
+    <div class="author">Abdulaziz Madg‘oziyev<span>Milliy sertifikat tayyorlov</span></div>
+    <div class="handle">@MatematikaMilliySertifikatUz</div>
+  </footer>
+</body>
+</html>
