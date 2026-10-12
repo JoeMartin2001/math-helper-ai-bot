@@ -128,10 +128,12 @@ export function buildRequest(msg: Message, botUsername: string): Request {
 
   // A reply to the bot continues that conversation; the replied message is the bot's own text.
   if (isReplyToBot(msg, botUsername)) {
+    const image = imageOf(msg);
     return {
       kind: "solve",
-      image: imageOf(msg),
-      question: withQuote(msg, question || DEFAULT_FOLLOW_UP),
+      image,
+      // A new photo with no text is a new problem to solve, not "explain the last answer".
+      question: withQuote(msg, question || (image ? DEFAULT_QUESTION : DEFAULT_FOLLOW_UP)),
       followUpOf: msg.reply_to_message!.message_id,
     };
   }

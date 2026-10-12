@@ -229,3 +229,13 @@ Deno.test("thanks messages are recognized, questions are not", () => {
     assertEquals(isThanks(t), false, t);
   }
 });
+
+Deno.test("replying to an answer with a new photo and no text asks to solve the photo", () => {
+  const m = msg({ photo, reply_to_message: botAnswer });
+  assertEquals(buildRequest(m, BOT), {
+    kind: "solve",
+    image: { fileId: "large", mimeType: "image/jpeg", size: 120_000 },
+    question: DEFAULT_QUESTION,
+    followUpOf: 50,
+  });
+});
