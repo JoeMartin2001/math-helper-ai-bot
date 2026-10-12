@@ -127,10 +127,11 @@ export class TelegramClient {
     if (json.ok) return json.result as T;
 
     const err = new TelegramError(method, json.error_code, json.description, json.parameters);
-    // Flood control: wait as instructed once, if the wait is short enough to fit our time budget.
+    // Flood control (busy groups allow ~20 messages a minute): wait as instructed and retry, a few
+    // times, as long as each wait fits the time left before the worker is stopped.
     const retryAfter = err.parameters?.retry_after;
-    if (err.code === 429 && retryAfter !== undefined && retryAfter <= 10 && attempt === 0) {
-      await new Promise((r) => setTimeout(r, retryAfter * 1000));
+    if (err.code === 429 && retryAfter !== undefined && retryAfter <= 30 && attempt < 3) {
+      await new Promise((r) => setTimeout(r, (retryAfter + Math.random()) * 1000));
       return this.call<T>(method, body, attempt + 1);
     }
     throw err;

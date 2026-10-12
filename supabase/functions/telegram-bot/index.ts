@@ -22,7 +22,7 @@ import {
   splitFormatted,
 } from "./format.ts";
 import { encodeBase64, sniffImageType } from "./media.ts";
-import { type Figure, type ImageData, solve } from "./solver.ts";
+import { type Figure, type ImageData, solve, type Usage } from "./solver.ts";
 import { type Message, type Target, TelegramClient, type Update } from "./telegram.ts";
 import {
   buildRequest,
@@ -153,7 +153,7 @@ async function handle(updateId: number, msg: Message): Promise<void> {
 
   // From here on, every path must finish the row.
   let placeholderId: number | undefined;
-  let typing: number | undefined;
+  let usage: Usage | undefined;
   const notify = async (text: string) => {
     if (placeholderId !== undefined) {
       try {
@@ -185,9 +185,8 @@ async function handle(updateId: number, msg: Message): Promise<void> {
     }
 
     placeholderId = (await send(MSG.working)).message_id;
-    // Chat actions expire after ~5s, so keep refreshing until we're done.
-    typing = setInterval(() => tg.sendChatAction(target).catch(() => {}), 4500);
-    tg.sendChatAction(target).catch(() => {});
+    // No repeating "typing…" indicator: the placeholder shows progress, and in busy groups the extra
+    // calls ran into Telegram's flood limit and blocked answers.
 
     const signal = AbortSignal.timeout(SOLVE_TIMEOUT_MS);
 
@@ -205,7 +204,7 @@ async function handle(updateId: number, msg: Message): Promise<void> {
     })));
 
     const result = await solve({ history, question, image: image ?? undefined, signal });
-    clearInterval(typing);
+    usage = result.kind === "ok" ? result.usage : undefined;
     if (result.kind === "refusal") {
       await notify(MSG.refusal);
       await finish(rowId, "done", { error: "refusal" });
@@ -232,9 +231,8 @@ async function handle(updateId: number, msg: Message): Promise<void> {
       (err instanceof Anthropic.APIError && err.status === 529);
     await notify(timedOut ? MSG.timeout : busy ? MSG.busy : MSG.failed)
       .catch((e) => console.error("Failed to report error", e));
-    await finish(rowId, "error", { error: timedOut ? "timeout" : describeError(err) });
-  } finally {
-    clearInterval(typing);
+    // Keep the cost even when delivery failed: the answer was paid for.
+    await finish(rowId, "error", { error: timedOut ? "timeout" : describeError(err), usage });
   }
 }
 
