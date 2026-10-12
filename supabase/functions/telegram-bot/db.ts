@@ -180,8 +180,13 @@ export async function finish(
   id: number,
   status: Exclude<Status, "processing">,
   extra: {
-    inputTokens?: number;
-    outputTokens?: number;
+    usage?: {
+      inputTokens: number;
+      cacheReadTokens: number;
+      cacheWriteTokens: number;
+      outputTokens: number;
+      costUsd: number;
+    };
     error?: string;
     answer?: string;
     answerMessageIds?: number[];
@@ -192,8 +197,11 @@ export async function finish(
     .from("requests")
     .update({
       status,
-      input_tokens: extra.inputTokens ?? null,
-      output_tokens: extra.outputTokens ?? null,
+      input_tokens: extra.usage?.inputTokens ?? null,
+      output_tokens: extra.usage?.outputTokens ?? null,
+      cache_read_tokens: extra.usage?.cacheReadTokens ?? null,
+      cache_write_tokens: extra.usage?.cacheWriteTokens ?? null,
+      cost_usd: extra.usage ? Math.round(extra.usage.costUsd * 1e5) / 1e5 : null,
       error: extra.error ?? null,
       answer: extra.answer ?? null,
       answer_message_ids: extra.answerMessageIds ?? null,
@@ -326,6 +334,8 @@ export async function listChats(): Promise<ChatListItem[]> {
     .from("chats")
     .select(CHAT_COLUMNS)
     .is("migrated_to", null)
+    // Students who opened the bot in private before it pointed them to the groups.
+    .or("type.neq.private,status.neq.pending")
     .order("created_at", { ascending: false });
   if (error) throw error;
 

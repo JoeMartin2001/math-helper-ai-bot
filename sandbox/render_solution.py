@@ -130,6 +130,20 @@ REPLACEMENTS = [
 def fix_math(src: str) -> str:
     for a, b in REPLACEMENTS:
         src = src.replace(a, b)
+    # Size modifiers (\big| \Bigg( ...): mathtext sizes delimiters itself only via \left/\right.
+    src = re.sub(r"\\[bB]igg?(?![a-zA-Z])", "", src)
+    # \left/\right must pair up in mathtext; if they don't (e.g. an evaluation bar "\right]_{a}^{b}"),
+    # fall back to plain delimiters.
+    if len(re.findall(r"\\left(?![a-zA-Z])", src)) != len(re.findall(r"\\right(?![a-zA-Z])", src)):
+        src = re.sub(r"\\(?:left|right)(?![a-zA-Z])", "", src)
+    src = re.sub(r"\\ge(?![a-zA-Z])", r"\\geq", src)
+    src = re.sub(r"\\le(?![a-zA-Z])", r"\\leq", src)
+    src = re.sub(r"\\(?:underbrace|overbrace)\{((?:[^{}]|\{[^{}]*\})*)\}(?:[_^]\{(?:[^{}]|\{[^{}]*\})*\})?",
+                 r"\1", src)
+    src = re.sub(r"\\boxed\{((?:[^{}]|\{[^{}]*\})*)\}", r"\1", src)
+    src = re.sub(r"\\color\{[^}]*\}", "", src)
+    src = src.replace(r"\cfrac", r"\dfrac").replace(r"\lVert", r"\Vert").replace(r"\rVert", r"\Vert")
+    src = re.sub(r"\\square(?![a-zA-Z])", "□", src)
     src = re.sub(r"\\operatorname\{([^}]*)\}", r"\\mathrm{\1}", src)
     src = re.sub(r"\\(?:text|textrm|textnormal|mbox)\{([^}]*)\}", lambda m: r"\mathrm{" + m.group(1).replace(" ", r"\ ") + "}", src)
     src = re.sub(r"\\textbf\{([^}]*)\}", lambda m: r"\mathbf{" + m.group(1).replace(" ", r"\ ") + "}", src)

@@ -5,6 +5,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { ImageMediaType } from "./media.ts";
 
 const MODEL = "claude-opus-5-5";
+// USD per million tokens for MODEL (cache writes use the 5-minute TTL rate).
+const PRICE = { input: 4, output: 20, cacheWrite: 5, cacheRead: 0.2 };
 const MAX_FIGURES = 3;
 // The API pauses long server-tool turns; resume at most this many times.
 const MAX_CONTINUATIONS = 3;
@@ -21,7 +23,7 @@ ASOSIY QOIDA: masala yechimini o'quvchiga RASM — "yechim varag'i" sifatida yub
 Ish tartibi (code_execution vositasi):
 1. Masalani yech. Hisob-kitob oddiy bo'lmasa, javobni Python (sympy) bilan tekshir.
 2. Savolda grafik, chizma, geometrik shakl yoki fizik sxema bo'lsa, uni matplotlib bilan rasmdagidek qayta chiz va /tmp/savol.png ga saqla: plt.rcParams["mathtext.fontset"] = "cm", plt.rcParams["font.family"] = "serif", oq fon, figsize=(4.2, 3.6), dpi=200, o'q va nuqta yozuvlari $...$ ichida, ortiqcha ramka va to'r yo'q.
-3. Yechimni /tmp/yechim.json ga yoz va BITTA buyruqda ishga tushir:
+3. Chizma, yechim.json va render'ni imkon qadar BITTA buyruqda bajar (har bir qo'shimcha buyruq vaqt va xarajatni oshiradi); sympy tekshiruvini ham shu buyruqqa qo'sh. Render buyrug'i:
    python "$INPUT_DIR/render_solution.py" /tmp/yechim.json "$OUTPUT_DIR" && ls "$OUTPUT_DIR"
    "FORMULA XATOSI" chiqsa, o'sha formulani tuzatib qayta ishga tushir.
 4. Oxirgi matnli javobing rasm ostidagi qisqa izoh bo'ladi: faqat yakuniy javob, bitta qatorda (masalan "Javob: B) 21" yoki "Javob: a) 9/8; b) 343/6"). Yechimni matnda takrorlama; kod, Python, JSON yoki fayllar haqida gapirma.
@@ -89,10 +91,18 @@ export type SolveResult =
     /** The solution sheet's content (its JSON), when Claude answered with a sheet. */
     sheet: unknown;
     truncated: boolean;
-    inputTokens: number;
-    outputTokens: number;
+    usage: Usage;
   }
   | { kind: "refusal" };
+
+export interface Usage {
+  /** Uncached input tokens. */
+  inputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  outputTokens: number;
+  costUsd: number;
+}
 
 export interface SolveInput {
   /** Earlier exchanges of this conversation, oldest first. */
@@ -179,8 +189,13 @@ async function solveWith(input: SolveInput, sandboxFiles: string[]): Promise<Sol
   const uploads = sandboxFiles.map((id) => ({ type: "container_upload" as const, file_id: id }));
   messages.push({ role: "user", content: [...uploads, ...userContent(input.question, input.image)] });
 
-  let inputTokens = 0;
-  let outputTokens = 0;
+  const usage: Usage = {
+    inputTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    outputTokens: 0,
+    costUsd: 0,
+  };
   const content: Anthropic.Beta.BetaContentBlock[] = [];
   let container: string | undefined;
   let message: Anthropic.Beta.BetaMessage;
@@ -205,10 +220,10 @@ async function solveWith(input: SolveInput, sandboxFiles: string[]): Promise<Sol
       )
       .finalMessage();
 
-    inputTokens += message.usage.input_tokens +
-      (message.usage.cache_read_input_tokens ?? 0) +
-      (message.usage.cache_creation_input_tokens ?? 0);
-    outputTokens += message.usage.output_tokens;
+    usage.inputTokens += message.usage.input_tokens;
+    usage.cacheReadTokens += message.usage.cache_read_input_tokens ?? 0;
+    usage.cacheWriteTokens += message.usage.cache_creation_input_tokens ?? 0;
+    usage.outputTokens += message.usage.output_tokens;
     content.push(...message.content);
     container = message.container?.id ?? container;
 
@@ -235,8 +250,11 @@ async function solveWith(input: SolveInput, sandboxFiles: string[]): Promise<Sol
     figures,
     sheet,
     truncated: message.stop_reason === "max_tokens",
-    inputTokens,
-    outputTokens,
+    usage: {
+      ...usage,
+      costUsd: (usage.inputTokens * PRICE.input + usage.outputTokens * PRICE.output +
+        usage.cacheWriteTokens * PRICE.cacheWrite + usage.cacheReadTokens * PRICE.cacheRead) / 1e6,
+    },
   };
 }
 

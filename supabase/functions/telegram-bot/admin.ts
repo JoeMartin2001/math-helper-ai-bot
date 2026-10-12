@@ -21,13 +21,15 @@ import type {
 } from "./telegram.ts";
 
 const TEXT = {
+  groupsOnly: "Assalomu alaykum! Men Abdulaziz Madg‘oziyevning guruhlarida ishlayman. " +
+    "Masalangiz rasmini o‘sha guruhga yuboring va izohda meni belgilang " +
+    "(@ belgisini yozing va ro‘yxatdan «Ustoz AI» ni tanlang).",
   pendingInChat:
     "⏳ Bot hozircha bu yerda faol emas: bot egasi tasdiqlashi kerak. Tasdiqlangach, shu yerda xabar beraman.",
   approvedInGroup: "✅ Bot bu guruhda faollashtirildi!",
   approvedInPrivate: "✅ Endi botdan foydalanishingiz mumkin!",
   blockedInGroup: "⛔ Bot bu guruhda o'chirildi.",
   notAdmin: "Bu amal faqat bot egasi uchun.",
-  adminHelp: "\n\nAdmin buyruqlari:\n/groups — guruhlar va chatlarni boshqarish",
 };
 
 export class AdminPanel {
@@ -42,18 +44,13 @@ export class AdminPanel {
     return this.adminIds.has(userId);
   }
 
-  /** Help text, with the admin commands appended for admins. */
-  helpFor(userId: number): string {
-    return this.usage + (this.isAdmin(userId) ? TEXT.adminHelp : "");
-  }
-
   /**
    * Returns whether the bot may answer in this message's chat. Unknown chats are registered
    * (approved if an admin is the one using it, pending otherwise, with admins notified); pending
    * chats are told once a day that they are awaiting approval.
    */
   async checkAccess(msg: Message, sender: { id: number; username?: string }): Promise<boolean> {
-    if (msg.chat.type === "private" && this.isAdmin(sender.id)) return true;
+    if (msg.chat.type === "private") return await this.checkPrivate(msg, sender);
 
     let row = await getChat(msg.chat.id);
     if (!row) {
@@ -78,9 +75,25 @@ export class AdminPanel {
     return row.status === "approved";
   }
 
+  /**
+   * Private chats: the bot is meant for the groups, so students who open it in private are pointed
+   * back there instead of being queued for approval. Admins, and private chats an admin approved
+   * earlier, can use it here.
+   */
+  private async checkPrivate(msg: Message, sender: { id: number }): Promise<boolean> {
+    if (this.isAdmin(sender.id)) return true;
+    const row = await getChat(msg.chat.id);
+    if (row?.status === "approved") return true;
+    if (row?.status !== "blocked") {
+      await this.tg.sendMessage({ chatId: msg.chat.id }, TEXT.groupsOnly).catch(warn("groups-only notice"));
+    }
+    return false;
+  }
+
   /** The bot was added to or removed from a chat (or a user started/blocked it in private). */
   async onMembership(u: ChatMemberUpdated): Promise<void> {
-    if (u.chat.type === "channel") return;
+    // Users starting or blocking the bot in private are handled when they write to it.
+    if (u.chat.type === "channel" || u.chat.type === "private") return;
     const change = membershipChange(u);
     if (change === "left") {
       await updateChat(u.chat.id, { is_member: false }).catch(warn("mark left"));

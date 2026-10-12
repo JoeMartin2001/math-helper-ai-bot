@@ -48,10 +48,11 @@ const MAX_IMAGE_BYTES = 3.75 * 1024 * 1024;
 const MINUTE = 60 * 1000;
 
 const MSG = {
+  // No @username here: students tapped it and opened the bot in private instead of using the group.
   usage: `Salom! Men matematika va fizika masalalarini bosqichma-bosqich yechib beraman.\n\n` +
-    `• Masala rasmini yuboring va izohda meni belgilang: @${BOT_USERNAME}\n` +
+    `• Masala rasmini shu guruhga yuboring va izohda meni belgilang: @ belgisini yozing va ro‘yxatdan «Ustoz AI» ni tanlang.\n` +
     `• Yoki masala rasmi bor xabarga javob (reply) qilib meni belgilang.\n` +
-    `• Javobim bo'yicha savolingiz bo'lsa, shu javobga reply qilib yozing.`,
+    `• Javobim bo‘yicha savolingiz bo‘lsa, shu javobga reply qilib yozing.`,
   working: "⏳ Yechilmoqda...",
   rateLimited: (minutes: number) =>
     `Siz bir soat ichida juda ko'p so'rov yubordingiz (${RATE_LIMIT_PER_HOUR} ta). Taxminan ${minutes} daqiqadan keyin qayta urinib ko'ring.`,
@@ -112,7 +113,7 @@ async function handle(updateId: number, msg: Message): Promise<void> {
 
   const request = buildRequest(msg, BOT_USERNAME);
   if (request.kind === "help") {
-    await send(admin.helpFor(sender.id));
+    await send(MSG.usage);
     return;
   }
 
@@ -206,8 +207,7 @@ async function handle(updateId: number, msg: Message): Promise<void> {
     // Keep the sheet's content with the answer, so a reply to the image can be answered in context.
     const transcript = sheetTranscript(result.sheet);
     await finish(rowId, "done", {
-      inputTokens: result.inputTokens,
-      outputTokens: result.outputTokens,
+      usage: result.usage,
       answer: transcript ? `${answer}\n\n[Yechim varag'i rasm sifatida yuborildi]\n${transcript}` : answer,
       answerMessageIds,
       figures: result.figures.length,
