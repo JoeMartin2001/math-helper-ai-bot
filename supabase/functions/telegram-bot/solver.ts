@@ -4,9 +4,15 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { ImageMediaType } from "./media.ts";
 
-const MODEL = "claude-opus-5-5";
-// USD per million tokens for MODEL (cache writes use the 5-minute TTL rate).
-const PRICE = { input: 4, output: 20, cacheWrite: 5, cacheRead: 0.2 };
+const MODEL = Deno.env.get("CLAUDE_MODEL") ?? "claude-opus-5-5";
+// USD per million tokens (cache writes at the 5-minute TTL rate, 1.25x input).
+const PRICES: Record<string, { input: number; output: number; cacheWrite: number; cacheRead: number }> = {
+  "claude-opus-5-5": { input: 4, output: 20, cacheWrite: 5, cacheRead: 0.2 },
+  "claude-sonnet-5-5": { input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.2 },
+  "claude-haiku-5-5": { input: 0.1, output: 0.5, cacheWrite: 0.125, cacheRead: 0.01 },
+};
+// Server-side refusal fallback is offered for these models only.
+const FALLBACK_MODELS = new Set(["claude-opus-5-5", "claude-sonnet-5-5"]);
 const MAX_FIGURES = 3;
 // The API pauses long server-tool turns; resume at most this many times.
 const MAX_CONTINUATIONS = 3;
@@ -111,6 +117,8 @@ export interface SolveInput {
   image?: ImageData;
   /** Abort the request (and any retries) when this fires. */
   signal: AbortSignal;
+  /** Overrides the model (defaults to CLAUDE_MODEL / Opus). */
+  model?: string;
 }
 
 // One retry for transient errors; the deadline signal bounds total time.
@@ -189,6 +197,8 @@ async function solveWith(input: SolveInput, sandboxFiles: string[]): Promise<Sol
   const uploads = sandboxFiles.map((id) => ({ type: "container_upload" as const, file_id: id }));
   messages.push({ role: "user", content: [...uploads, ...userContent(input.question, input.image)] });
 
+  const model = input.model ?? MODEL;
+  const price = PRICES[model] ?? PRICES["claude-opus-5-5"];
   const usage: Usage = {
     inputTokens: 0,
     cacheReadTokens: 0,
@@ -204,13 +214,14 @@ async function solveWith(input: SolveInput, sandboxFiles: string[]): Promise<Sol
     message = await client.beta.messages
       .stream(
         {
-          model: MODEL,
+          model,
           max_tokens: 16000,
           thinking: { type: "adaptive" },
           output_config: { effort: "medium" },
           // On a safety-classifier decline, retry server-side on Anthropic's recommended fallback model.
-          betas: ["server-side-fallback-2026-07-01"],
-          fallbacks: "default",
+          ...(FALLBACK_MODELS.has(model)
+            ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const }
+            : {}),
           system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
           tools: [{ type: "code_execution_20260521", name: "code_execution" }],
           ...(container ? { container } : {}),
@@ -252,8 +263,8 @@ async function solveWith(input: SolveInput, sandboxFiles: string[]): Promise<Sol
     truncated: message.stop_reason === "max_tokens",
     usage: {
       ...usage,
-      costUsd: (usage.inputTokens * PRICE.input + usage.outputTokens * PRICE.output +
-        usage.cacheWriteTokens * PRICE.cacheWrite + usage.cacheReadTokens * PRICE.cacheRead) / 1e6,
+      costUsd: (usage.inputTokens * price.input + usage.outputTokens * price.output +
+        usage.cacheWriteTokens * price.cacheWrite + usage.cacheReadTokens * price.cacheRead) / 1e6,
     },
   };
 }

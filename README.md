@@ -96,5 +96,6 @@ To preview the renderer locally (with matplotlib 3.10 installed), run `SOLUTION_
   - Background work is bounded by the Edge Function wall-clock limit: 150s on the free plan, 400s on paid.
   - Claude runs at `effort: "medium"` so it stays well within that limit. Raise it in `solver.ts` for harder problems if you're on a paid plan.
 - **Refusal fallback:** requests opt into Anthropic's server-side refusal fallback (`fallbacks: "default"`). If Claude's safety classifiers decline a request, the API retries it on a recommended fallback model. To disable this, remove `betas` and `fallbacks` in `solver.ts`.
-- **Cost:** check usage with `select date(created_at), count(*), sum(input_tokens), sum(output_tokens) from requests group by 1 order by 1 desc;`.
+- **Model:** set with the `CLAUDE_MODEL` secret (default `claude-opus-5-5`). On a 21-problem test (18 real Milliy sertifikat problems from Abdulaziz's channel plus 3 physics problems), Haiku 5.5, Sonnet 5.5 and Opus 5.5 all scored 21/21. Haiku costs about 1/18 as much, so production runs on Haiku. To switch back: `supabase secrets set CLAUDE_MODEL=claude-opus-5-5`.
+- **Cost:** each request's real cost is stored in `requests.cost_usd`; see the `daily_costs` view. You can also check usage with `select date(created_at), count(*), sum(input_tokens), sum(output_tokens) from requests group by 1 order by 1 desc;`.
   - Lower `RATE_LIMIT_PER_HOUR` to cap spend.

@@ -296,6 +296,9 @@ def question_section(sol: dict) -> list[Item]:
     q = sol.get("question") or []
     if isinstance(q, str):
         q = [q]
+    q = list(q)
+    if q and isinstance(q[0], str):  # the template prints "Savol." itself
+        q[0] = re.sub(r"^\s*Savol[.:]?\s*", "", q[0])
     lines: list[Item] = []
     first = True
     for part in q:
