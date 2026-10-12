@@ -8,36 +8,67 @@ const MODEL = "claude-opus-5-5";
 const MAX_FIGURES = 3;
 // The API pauses long server-tool turns; resume at most this many times.
 const MAX_CONTINUATIONS = 3;
+// Files API ids of sandbox/render_solution.py and its fonts (see scripts/upload-sandbox-assets.ts).
+const SANDBOX_FILE_IDS = (Deno.env.get("SANDBOX_FILE_IDS") ?? "").split(",").map((s) => s.trim()).filter(
+  Boolean,
+);
 
 // Kept constant so the prefix is cacheable across requests.
 const SYSTEM_PROMPT =
-  `Sen sabrli va tajribali matematika o'qituvchisisan. Foydalanuvchilar Telegram guruhida matematik masalaning rasmini va o'zbek tilidagi savolni yuborishadi.
+  `Sen sabrli va tajribali matematika va fizika o'qituvchisisan — Abdulaziz Madg'oziyevning "Ustoz AI" yordamchisi. O'quvchilar Telegram guruhida masala rasmini va o'zbek tilidagi savolni yuborishadi. Har doim o'zbek tilida (lotin yozuvida) javob ber.
 
-Javob tili va tuzilishi:
-- Har doim o'zbek tilida (lotin yozuvida) javob ber, savol qaysi tilda bo'lishidan qat'i nazar.
-- Avval masala shartini qisqacha qayta yoz, so'ng uni bosqichma-bosqich, tushunarli qilib yech, oxirida alohida qatorda "Javob: ..." deb yakuniy javobni yoz.
-- Agar savolda faqat javob so'ralgan bo'lsa ham, qisqa izoh bilan yechimni ko'rsat.
-- Agar rasmda bir nechta masala bo'lsa va savolda qaysi biri ko'rsatilmagan bo'lsa, hammasini tartib bilan yech.
-- Javobni ixcham saqla: keraksiz takrorlarsiz, lekin o'quvchi har bir qadamni tushunadigan darajada.
+ASOSIY QOIDA: masala yechimini o'quvchiga RASM — "yechim varag'i" sifatida yuborasan. Varaqni tayyor shablon chizadi (Abdulaziz ustozning Milliy sertifikat yechimlari uslubida); sen faqat uning mazmunini JSON qilib yozasan.
 
-Format (javob Telegram'da oddiy matn sifatida ko'rsatiladi):
-- LaTeX, # sarlavhalar, jadval belgilari yoki kod bloklaridan foydalanma.
-- Matematik belgilar uchun Unicode ishlat: x², x³, √, ∛, π, ≤, ≥, ≠, ±, ×, ÷, °, ∞, ∫, ∑, kasrlar uchun a/b.
-- Qadam sarlavhalarini **qalin** qilib belgilashing mumkin, lekin kam ishlat.
+Ish tartibi (code_execution vositasi):
+1. Masalani yech. Hisob-kitob oddiy bo'lmasa, javobni Python (sympy) bilan tekshir.
+2. Savolda grafik, chizma, geometrik shakl yoki fizik sxema bo'lsa, uni matplotlib bilan rasmdagidek qayta chiz va /tmp/savol.png ga saqla: plt.rcParams["mathtext.fontset"] = "cm", plt.rcParams["font.family"] = "serif", oq fon, figsize=(4.2, 3.6), dpi=200, o'q va nuqta yozuvlari $...$ ichida, ortiqcha ramka va to'r yo'q.
+3. Yechimni /tmp/yechim.json ga yoz va BITTA buyruqda ishga tushir:
+   python "$INPUT_DIR/render_solution.py" /tmp/yechim.json "$OUTPUT_DIR" && ls "$OUTPUT_DIR"
+   "FORMULA XATOSI" chiqsa, o'sha formulani tuzatib qayta ishga tushir.
+4. Oxirgi matnli javobing rasm ostidagi qisqa izoh bo'ladi: faqat yakuniy javob, bitta qatorda (masalan "Javob: B) 21" yoki "Javob: a) 9/8; b) 343/6"). Yechimni matnda takrorlama; kod, Python, JSON yoki fayllar haqida gapirma.
 
-Hisoblash va rasmlar (code_execution vositasi):
-- Hisob-kitob oddiy bo'lmasa (tenglama, kasrlar, ildizlar, katta sonlar), yakuniy javobni Python (sympy) bilan tekshir. Javobda kod, Python yoki tekshiruv jarayonini tilga olma — o'quvchi faqat tushuntirishni ko'radi.
-- Rasm haqiqatan tushunishga yordam bersa, matplotlib bilan chiz: funksiya grafigi, geometrik shakl (berilgan va topilgan qiymatlar belgilangan holda), koordinata tekisligi, son o'qi, harakat masalasi sxemasi. Murakkab formulalar ko'p bo'lsa (ko'p qavatli kasrlar, integrallar, matritsalar), asosiy hisob-kitoblarni matplotlib mathtext bilan toza "formula varag'i" rasmi qilib chizishing mumkin.
-- Oddiy arifmetika uchun rasm chizma. Ko'pi bilan ${MAX_FIGURES} ta rasm.
-- Rasm talablari: oq fon, figsize=(7, 5) atrofida, dpi=150, yirik shrift (kamida 12), yozuvlar o'zbek tilida, plt.tight_layout().
-- Har bir rasmni qisqa lotin nomli PNG fayl sifatida (masalan grafik.png) to'g'ridan-to'g'ri $OUTPUT_DIR papkasiga saqla va o'sha buyruqda ls "$OUTPUT_DIR" bilan tekshir — boshqa joyga saqlangan rasm o'quvchiga yetib bormaydi.
-- Javob matnida rasm turishi kerak bo'lgan joyga alohida qatorda [[RASM:grafik.png]] belgisini qo'y (fayl nomi aynan bir xil bo'lsin).
+JSON tuzilishi:
+{
+  "topic": "Kvadrat funksiya",
+  "question": ["Savol sharti, rasmdagidek to'liq ...", {"math": "alohida qatordagi formula"}],
+  "figure": "/tmp/savol.png",
+  "options": {"A": "23", "B": "21", "C": "20", "D": "19"},
+  "given": ["$m=2\\\\ \\\\mathrm{kg}$", "$t=5\\\\ \\\\mathrm{s}$"],
+  "find": ["$F$ — ?"],
+  "steps": [
+    {"title": "Parabola tenglamasi", "body": ["Matn va $inline$ formula ...", {"math": "y=-x^2+2x+8"}]},
+    {"title": "Tekshiruv", "check": true, "body": ["..."]}
+  ],
+  "answer": {"option": "B"}
+}
+- topic: 1–3 so'zli mavzu (masalan "Kvadrat funksiya", "Dinamika", "Elektr toki"). figure: faqat savolda chizma bo'lsa. options: faqat test variantlari bo'lsa (savol matniga variantlarni yozma). given/find: fizika masalalarida (matematikada qo'yma).
+- answer: test bo'lsa {"option": "B"}; bir necha qism bo'lsa {"parts": [{"label": "a)", "value": "$\\\\dfrac{9}{8}$"}, {"label": "b)", "value": "$\\\\dfrac{343}{6}$"}]}; aks holda {"value": "$x=2$"}.
+- Qadamlar: odatda 3–5 ta, har biri qisqa sarlavha va 1–4 qator. Ixcham, lekin o'quvchi har qadamni tushunadigan darajada. "Tekshiruv" qadami ixtiyoriy.
+- Bitta varaqda bitta masala. Rasmda bir nechta masala bo'lsa va qaysi biri so'ralmagan bo'lsa, birinchisini yech va izohda qolganlarini alohida so'rash mumkinligini ayt.
+
+Fizika masalalari:
+- "given" ga berilgan kattaliklarni, "find" ga topiladigan kattalikni yoz ("Berilgan / Topish kerak" bloki).
+- Kattaliklar SI da bo'lmasa, birinchi qadamda SI ga o'tkaz (masalan $72\\ \\mathrm{km/soat}=20\\ \\mathrm{m/s}$).
+- Avval umumiy formulani harflarda yoz, keyin sonlarni birliklari bilan qo'y; natija doim birligi bilan.
+- Birliklar \\mathrm{} ichida va sondan bo'sh joy bilan: $a=2\\ \\mathrm{m/s^2}$, $F=4\\ \\mathrm{N}$, $R=5\\ \\Omega$. Vektorlar: \\vec{F}.
+- g masalada berilmagan bo'lsa, $g=10\\ \\mathrm{m/s^2}$ ol (testlardagi odat) va buni yechimda ayt; javob variantlari 9,8 ga mos kelsa, 9,8 ol.
+- Kerak bo'lsa sxema chiz: kuchlar (jism va kuch strelkalari), harakat grafiklari v(t), x(t), oddiy elektr zanjiri, linzada nurlar yo'li.
+
+Formulalar (matplotlib mathtext — LaTeX'ning bir qismi):
+- Matn ichida $...$; alohida qatordagi formula {"math": "..."} (dollar belgisisiz). Dollar belgisini faqat formula uchun ishlat.
+- JSON qatorida teskari chiziq ikkilanadi: "\\\\dfrac{a}{b}".
+- Ishlaydi: \\frac, \\dfrac, \\sqrt{}, \\sqrt[3]{}, ^, _, \\int_{a}^{b}, \\sum, \\lim_{x\\to 0}, \\left( \\right), \\left[ \\right], \\cdot, \\times, \\pm, \\leq, \\geq, \\neq, \\approx, \\Rightarrow, \\infty, \\pi, \\alpha…\\omega, \\Delta, \\Omega, \\vec{F}, \\angle, \\triangle, ^\\circ, \\mathrm{}, \\text{}, \\quad, \\log_{a}, \\sin, \\cos, \\tan.
+- Ishlamaydi: \\begin{...} (cases, matrix, align, array), \\boxed, \\tag, \\overset. Tenglamalar sistemasini alohida {"math"} qatorlarida yoz.
+- Display formulada kasrlar uchun \\dfrac ishlat. Juda uzun formulani ikki {"math"} qatoriga bo'l.
+
+Qachon rasm emas, oddiy matn:
+- Qisqa suhbat ("rahmat", salomlashish), bitta ta'rif yoki qisqa aniqlashtirish so'ralganda — bir necha qatorli matn yoz.
+- Matnli javobda LaTeX va Markdown ishlatma; Unicode belgilar ishlat (x², √, π, ≤, ≥, ±, kasrlar a/b). Yakuniy javob alohida qatorda "Javob: ..." bo'lsin.
 
 Suhbat:
-- Foydalanuvchi oldingi javobingga javob (reply) qilib qo'shimcha savol bersa, avvalgi suhbatdagi masala va javobga tayanib javob ber; masalani qayta yuborishni so'rama.
-- "Soddaroq", "qisqaroq" deb so'ralsa, haqiqatan qisqa yoz (bir necha qator): butun yechimni qayta yozma, faqat asosiy g'oya va javobni sodda tilda tushuntir.
-- Agar rasm o'qib bo'lmaydigan darajada xira bo'lsa yoki unda matematik masala bo'lmasa, buni xushmuomalalik bilan ayt va aniqroq rasm yuborishni so'ra.
-- Matematika va aniq fanlarga aloqasi bo'lmagan so'rovlarga qisqa va xushmuomalalik bilan javob berib, faqat matematik masalalarda yordam bera olishingni ayt.`;
+- O'quvchi oldingi javobingga reply qilib so'rasa, avvalgi masala va yechimga tayan; masalani qayta yuborishni so'rama. "Soddaroq tushuntir" deyilsa — kamroq qadamli, soddaroq yangi varaq chiz.
+- Rasm o'qib bo'lmaydigan darajada xira bo'lsa yoki unda masala bo'lmasa, buni xushmuomalalik bilan matnda ayt.
+- Matematika va fizikaga aloqasi bo'lmagan so'rovlarga qisqa va xushmuomalalik bilan, faqat matematika va fizika masalalarida yordam bera olishingni ayt.`;
 
 export interface ImageData {
   base64: string;
@@ -53,7 +84,10 @@ export type SolveResult =
   | {
     kind: "ok";
     text: string;
+    /** Images to send: the rendered solution sheet pages, or other figures Claude drew. */
     figures: Figure[];
+    /** The solution sheet's content (its JSON), when Claude answered with a sheet. */
+    sheet: unknown;
     truncated: boolean;
     inputTokens: number;
     outputTokens: number;
@@ -89,7 +123,9 @@ export async function solve(input: SolveInput): Promise<SolveResult> {
     { role: "user" as const, content: userContent(turn.question, turn.image) },
     { role: "assistant" as const, content: turn.answer },
   ]);
-  messages.push({ role: "user", content: userContent(input.question, input.image) });
+  // Mount the solution-sheet renderer and its fonts into this request's sandbox ($INPUT_DIR).
+  const uploads = SANDBOX_FILE_IDS.map((id) => ({ type: "container_upload" as const, file_id: id }));
+  messages.push({ role: "user", content: [...uploads, ...userContent(input.question, input.image)] });
 
   let inputTokens = 0;
   let outputTokens = 0;
@@ -140,54 +176,86 @@ export async function solve(input: SolveInput): Promise<SolveResult> {
     .join("\n")
     .trim();
 
+  const { figures, sheet } = await collectOutputs(content, input.signal);
   return {
     kind: "ok",
     text,
-    figures: await collectFigures(content, input.signal),
+    figures,
+    sheet,
     truncated: message.stop_reason === "max_tokens",
     inputTokens,
     outputTokens,
   };
 }
 
-/** Downloads the PNG/JPEG files Claude left in $OUTPUT_DIR, then deletes them from the Files API. */
-async function collectFigures(
+const SHEET_PAGE = /^yechim-(\d+)\.png$/;
+
+/**
+ * Downloads what Claude left in $OUTPUT_DIR, then deletes it from the Files API.
+ * If Claude rendered a solution sheet, returns the pages (and JSON) of its last render only, since
+ * an earlier attempt may have left pages a later, fixed render no longer has. Otherwise returns the
+ * latest version of each image Claude saved.
+ */
+async function collectOutputs(
   content: Anthropic.Beta.BetaContentBlock[],
   signal: AbortSignal,
-): Promise<Figure[]> {
-  const fileIds = content.flatMap((b) =>
+): Promise<{ figures: Figure[]; sheet: unknown }> {
+  // Each tool result is one command; its output files come from that command's own $OUTPUT_DIR.
+  const outputs = content.flatMap((b, run) =>
     b.type === "bash_code_execution_tool_result" && b.content.type === "bash_code_execution_result"
-      ? b.content.content.map((o) => o.file_id)
+      ? b.content.content.map((o) => ({ run, fileId: o.file_id }))
       : []
   );
 
-  // Claude may re-save a figure after fixing it; each save is a new file, and the last one wins.
-  const latest = new Map<string, string>();
-  for (const fileId of fileIds) {
+  const files: { run: number; fileId: string; name: string }[] = [];
+  for (const { run, fileId } of outputs) {
     try {
       const meta = await client.files.retrieveMetadata(fileId, {}, { signal });
-      const name = meta.filename.split("/").pop() ?? meta.filename;
-      if (/\.(png|jpe?g)$/i.test(name)) latest.set(name, fileId);
+      files.push({ run, fileId, name: meta.filename.split("/").pop() ?? meta.filename });
     } catch (err) {
       console.warn("Could not read generated file metadata", fileId, err);
     }
   }
 
-  const figures: Figure[] = [];
-  for (const [name, fileId] of [...latest].slice(0, MAX_FIGURES)) {
-    try {
-      const res = await client.files.download(fileId, {}, { signal });
-      figures.push({ name, bytes: new Uint8Array(await res.arrayBuffer()) });
-    } catch (err) {
-      console.warn("Could not download generated file", fileId, err);
-    }
-  }
+  const download = async (fileId: string) =>
+    new Uint8Array(await (await client.files.download(fileId, {}, { signal })).arrayBuffer());
 
-  // Generated files persist until deleted; Telegram keeps the copy users see.
-  await Promise.all(
-    fileIds.map((id) =>
-      client.files.delete(id).catch((err) => console.warn("Could not delete file", id, err))
-    ),
-  );
-  return figures;
+  const figures: Figure[] = [];
+  let sheet: unknown = null;
+  try {
+    const lastSheetRun = Math.max(-1, ...files.filter((f) => SHEET_PAGE.test(f.name)).map((f) => f.run));
+    if (lastSheetRun >= 0) {
+      const run = files.filter((f) => f.run === lastSheetRun);
+      const pages = run
+        .filter((f) => SHEET_PAGE.test(f.name))
+        .sort((a, b) => Number(a.name.match(SHEET_PAGE)![1]) - Number(b.name.match(SHEET_PAGE)![1]))
+        .slice(0, MAX_FIGURES);
+      for (const page of pages) figures.push({ name: page.name, bytes: await download(page.fileId) });
+      const json = run.find((f) => f.name === "yechim.json");
+      if (json) {
+        try {
+          sheet = JSON.parse(new TextDecoder().decode(await download(json.fileId)));
+        } catch (err) {
+          console.warn("Could not read solution sheet JSON", err);
+        }
+      }
+    } else {
+      // Claude may re-save a figure after fixing it; each save is a new file, and the last one wins.
+      const latest = new Map<string, string>();
+      for (const f of files) if (/\.(png|jpe?g)$/i.test(f.name)) latest.set(f.name, f.fileId);
+      for (const [name, fileId] of [...latest].slice(0, MAX_FIGURES)) {
+        figures.push({ name, bytes: await download(fileId) });
+      }
+    }
+  } catch (err) {
+    console.warn("Could not download generated files", err);
+  } finally {
+    // Generated files persist until deleted; Telegram keeps the copy users see.
+    await Promise.all(
+      outputs.map(({ fileId }) =>
+        client.files.delete(fileId).catch((err) => console.warn("Could not delete file", fileId, err))
+      ),
+    );
+  }
+  return { figures, sheet };
 }

@@ -103,3 +103,33 @@ function clipEntities(entities: MessageEntity[], start: number, end: number): Me
     return t > s ? [{ ...e, offset: s - start, length: t - s }] : [];
   });
 }
+
+/**
+ * Plain-text version of a solution sheet (the JSON Claude rendered), kept as the answer's text so
+ * follow-up questions can refer to what the image showed. Formulas stay in LaTeX.
+ */
+export function sheetTranscript(sheet: unknown): string {
+  if (!sheet || typeof sheet !== "object") return "";
+  const s = sheet as Record<string, unknown>;
+  const part = (p: unknown) =>
+    p && typeof p === "object" && "math" in p ? `$$${(p as { math: unknown }).math}$$` : String(p);
+  const parts = (v: unknown) => (Array.isArray(v) ? v : v ? [v] : []).map(part).join("\n");
+
+  const lines: string[] = [];
+  if (s.topic) lines.push(`Mavzu: ${s.topic}`);
+  if (s.question) lines.push(`Savol: ${parts(s.question)}`);
+  if (s.options && typeof s.options === "object") {
+    lines.push("Variantlar: " + Object.entries(s.options).map(([k, v]) => `${k}) ${v}`).join("  "));
+  }
+  const steps = Array.isArray(s.steps) ? s.steps : [];
+  steps.forEach((step, i) => {
+    const st = (step ?? {}) as Record<string, unknown>;
+    lines.push(`${i + 1}. ${st.title ?? ""}\n${parts(st.body)}`);
+  });
+  const ans = (s.answer ?? {}) as Record<string, unknown>;
+  if (ans.option) lines.push(`Javob: ${ans.option}`);
+  else if (Array.isArray(ans.parts)) {
+    lines.push("Javob: " + ans.parts.map((p) => `${p?.label ?? ""} ${p?.value ?? ""}`.trim()).join("; "));
+  } else if (ans.value) lines.push(`Javob: ${ans.value}`);
+  return lines.join("\n");
+}

@@ -1,5 +1,5 @@
 import { assert, assertEquals } from "@std/assert";
-import { answerForHistory, formatText, parseSegments, splitFormatted } from "./format.ts";
+import { answerForHistory, formatText, parseSegments, sheetTranscript, splitFormatted } from "./format.ts";
 
 const plain = (text: string) => ({ text, entities: [] });
 
@@ -60,4 +60,20 @@ Deno.test("figure markers split the answer in order", () => {
 
 Deno.test("answer without markers is a single text segment", () => {
   assertEquals(parseSegments("Javob: 5"), [{ kind: "text", text: "Javob: 5" }]);
+});
+
+Deno.test("sheet transcript keeps the solution readable for follow-ups", () => {
+  const t = sheetTranscript({
+    topic: "Harakat masalasi",
+    question: ["70 km masofa ..."],
+    options: { A: "23", B: "21" },
+    steps: [{ title: "Shart", body: ["$t_1-t_2=2$", { math: "v=20" }] }],
+    answer: { option: "B" },
+  });
+  assertEquals(
+    t,
+    "Mavzu: Harakat masalasi\nSavol: 70 km masofa ...\nVariantlar: A) 23  B) 21\n1. Shart\n$t_1-t_2=2$\n$$v=20$$\nJavob: B",
+  );
+  assertEquals(sheetTranscript(null), "");
+  assertEquals(sheetTranscript({ answer: { parts: [{ label: "a)", value: "9/8" }] } }), "Javob: a) 9/8");
 });

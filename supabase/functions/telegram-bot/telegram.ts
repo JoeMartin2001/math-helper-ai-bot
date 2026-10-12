@@ -203,6 +203,34 @@ export class TelegramClient {
     return this.call<Message>("sendPhoto", form);
   }
 
+  /** Sends 2–10 photos as one album; the caption shows under the first photo. */
+  sendMediaGroup(
+    to: Target,
+    photos: { bytes: Uint8Array; filename: string }[],
+    opts: { replyTo?: number; caption?: string; captionEntities?: MessageEntity[] } = {},
+  ): Promise<Message[]> {
+    const form = new FormData();
+    form.set("chat_id", String(to.chatId));
+    if (to.threadId) form.set("message_thread_id", String(to.threadId));
+    const media = photos.map((p, i) => {
+      form.set(`photo${i}`, new Blob([p.bytes as BlobPart]), p.filename);
+      return {
+        type: "photo",
+        media: `attach://photo${i}`,
+        ...(i === 0 && opts.caption ? { caption: opts.caption } : {}),
+        ...(i === 0 && opts.captionEntities?.length ? { caption_entities: opts.captionEntities } : {}),
+      };
+    });
+    form.set("media", JSON.stringify(media));
+    if (opts.replyTo) {
+      form.set(
+        "reply_parameters",
+        JSON.stringify({ message_id: opts.replyTo, allow_sending_without_reply: true }),
+      );
+    }
+    return this.call<Message[]>("sendMediaGroup", form);
+  }
+
   sendChatAction(to: Target, action = "typing"): Promise<unknown> {
     return this.call("sendChatAction", {
       chat_id: to.chatId,

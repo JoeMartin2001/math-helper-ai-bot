@@ -74,6 +74,22 @@ Only chats an admin has approved can use the bot, so strangers can't spend your 
 | `ADMIN_USER_IDS` | *(none)* | Comma-separated Telegram user ids allowed to approve/block chats. **Required:** with no admins, every new chat stays pending |
 | `SOLVE_TIMEOUT_SECONDS` | 120 | When to give up and tell the user. Keep it below the wall-clock limit |
 
+## Solution sheets
+Claude answers a problem with a typeset image in the style of Abdulaziz's Milliy sertifikat solution sheets. The image has a question box with a topic tag, a redrawn figure and the A–D options, then numbered steps with formulas, and a "Javob" box with the correct option highlighted. A one-line answer goes underneath as the caption.
+
+How it works:
+1. `sandbox/render_solution.py` is a small typesetter built on matplotlib's TeX-style math engine with Computer Modern fonts. It runs inside Claude's code execution sandbox, which has no LaTeX.
+2. Claude writes the solution as JSON, redraws any graph from the question, and runs the script.
+3. The bot sends the resulting `yechim-N.png` pages as a photo, or as an album when there is more than one page. It keeps the JSON as the text of the answer, so follow-up questions have context.
+4. Short chat, such as thanks or a quick clarification, gets a plain text answer.
+
+After editing anything in `sandbox/`, upload it again and point the bot at the new files:
+```bash
+deno run -A scripts/upload-sandbox-assets.ts   # prints SANDBOX_FILE_IDS
+supabase secrets set SANDBOX_FILE_IDS=<ids>
+```
+To preview the renderer locally (with matplotlib 3.10 installed), run `SOLUTION_FONTS=sandbox/fonts python sandbox/render_solution.py solution.json out/`.
+
 ## Notes
 - **Figures:** Claude saves PNGs to `$OUTPUT_DIR` in its sandbox and places `[[RASM:name.png]]` markers in the answer. The bot sends text and photos in that order, then deletes the files from the Anthropic Files API. Code execution includes 1,550 free container-hours per month, then $0.05/hour.
 - **Timeouts:** the function returns 200 to Telegram immediately and solves the problem in the background with `EdgeRuntime.waitUntil`.

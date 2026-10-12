@@ -12,7 +12,15 @@ import {
   sweepStale,
   type Turn,
 } from "./db.ts";
-import { answerForHistory, formatText, parseSegments, type Segment, splitFormatted } from "./format.ts";
+import {
+  answerForHistory,
+  formatText,
+  MAX_CAPTION,
+  parseSegments,
+  type Segment,
+  sheetTranscript,
+  splitFormatted,
+} from "./format.ts";
 import { encodeBase64, sniffImageType } from "./media.ts";
 import { type Figure, type ImageData, solve } from "./solver.ts";
 import { type Message, type Target, TelegramClient, type Update } from "./telegram.ts";
@@ -40,7 +48,7 @@ const MAX_IMAGE_BYTES = 3.75 * 1024 * 1024;
 const MINUTE = 60 * 1000;
 
 const MSG = {
-  usage: `Salom! Men matematik masalalarni bosqichma-bosqich yechib beraman.\n\n` +
+  usage: `Salom! Men matematika va fizika masalalarini bosqichma-bosqich yechib beraman.\n\n` +
     `• Masala rasmini yuboring va izohda meni belgilang: @${BOT_USERNAME}\n` +
     `• Yoki masala rasmi bor xabarga javob (reply) qilib meni belgilang.\n` +
     `• Javobim bo'yicha savolingiz bo'lsa, shu javobga reply qilib yozing.`,
@@ -195,10 +203,12 @@ async function handle(updateId: number, msg: Message): Promise<void> {
     const placeholder = placeholderId;
     placeholderId = undefined; // deliver owns it now; if delivery fails midway, report in a new message
     const answerMessageIds = await deliver(target, msg.message_id, placeholder, answer, result.figures);
+    // Keep the sheet's content with the answer, so a reply to the image can be answered in context.
+    const transcript = sheetTranscript(result.sheet);
     await finish(rowId, "done", {
       inputTokens: result.inputTokens,
       outputTokens: result.outputTokens,
-      answer,
+      answer: transcript ? `${answer}\n\n[Yechim varag'i rasm sifatida yuborildi]\n${transcript}` : answer,
       answerMessageIds,
       figures: result.figures.length,
     });
@@ -240,8 +250,9 @@ async function loadHistoryImage(ref: ImageRef | null): Promise<ImageData | undef
 }
 
 /**
- * Sends the answer as text and figures in the order Claude placed them. The first text chunk
- * replaces the placeholder; everything else is threaded under the question. Figures Claude
+ * Sends the answer. A solution sheet goes out as photo(s) with the short answer as the caption.
+ * Otherwise text and figures go out in the order Claude placed them: the first text chunk
+ * replaces the placeholder, everything else is threaded under the question, and figures Claude
  * drew but didn't place go at the end. Returns the ids of all messages that carry the answer.
  */
 async function deliver(
@@ -251,6 +262,27 @@ async function deliver(
   answer: string,
   figures: Figure[],
 ): Promise<number[]> {
+  const captioned = figures.length > 0 && answer.length <= MAX_CAPTION && !answer.includes("[[RASM:");
+  if (captioned) {
+    const caption = formatText(answer);
+    const photos = figures.map((f) => ({ bytes: f.bytes, filename: f.name }));
+    const sent = photos.length === 1
+      ? [
+        await tg.sendPhoto(target, photos[0], {
+          replyTo,
+          caption: caption.text,
+          captionEntities: caption.entities,
+        }),
+      ]
+      : await tg.sendMediaGroup(target, photos.slice(0, 10), {
+        replyTo,
+        caption: caption.text,
+        captionEntities: caption.entities,
+      });
+    await tg.deleteMessage(target.chatId, placeholderId).catch(() => {});
+    return sent.map((m) => m.message_id);
+  }
+
   const segments: Segment[] = parseSegments(answer);
   const byName = new Map(figures.map((f) => [f.name, f]));
   const placed = new Set(segments.flatMap((s) => (s.kind === "figure" ? [s.name] : [])));

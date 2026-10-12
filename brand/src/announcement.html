@@ -49,6 +49,10 @@
   .ans { font-weight: 800; color: #fff; }
   .muted { color: #A8B6C6; }
 
+  .photo { display: block; width: 100%; border-radius: 10px; margin-bottom: 8px; }
+  .sheetwrap { height: 206px; overflow: hidden; border-radius: 10px; margin: 4px 0 8px;
+               box-shadow: inset 0 -30px 24px -18px rgba(24, 37, 51, 0.9); }
+  .sheet { display: block; width: 100%; }
   .glyph.a { font-size: 200px; left: 590px; top: -30px; }
 </style>
 </head>
@@ -58,7 +62,7 @@
   <div class="left">
     <span class="pill badge">YANGI</span>
     <h1 class="display"><span class="accent">Ustoz AI</span><br>endi guruhimizda!</h1>
-    <p class="lead">Masala rasmini yuboring — bot uni o‘qiydi, <b>bosqichma-bosqich yechadi</b>, kerak bo‘lsa grafik chizadi va javobni tekshiradi. Istalgan vaqtda, soniyalar ichida.</p>
+    <p class="lead">Matematika yoki fizika masalasi rasmini yuboring — bot uni o‘qiydi, <b>bosqichma-bosqich yechadi</b> va yechimni formulalar va chizmalar bilan tayyor <b>yechim varag‘i</b> qilib yuboradi.</p>
     <span class="pill cta">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
       Rasm + @mathustozai_bot
@@ -84,26 +88,13 @@
     <div class="msgs">
       <div class="msg student">
         <div class="from">Dilnoza</div>
-        <div class="paper"><div>y = x² − 4x + 3<small>grafigini chizing, uchini toping</small></div></div>
+        <img class="photo" src="img/question-sample.jpg" alt="">
         <span class="mention">@mathustozai_bot</span> yechib bering
       </div>
       <div class="msg bot">
         <div class="from"><img src="mark.svg" alt="">Ustoz AI</div>
-        <span class="muted">Uchi:</span> x₀ = −b/2a = 2, &nbsp;y₀ = −1<br>
-        <span class="muted">x o‘qi bilan:</span> x² − 4x + 3 = 0 → x = 1; 3
-        <svg class="graph" width="386" height="150" viewBox="0 0 386 150">
-          <line x1="20" y1="112" x2="370" y2="112" stroke="#9AA3B2" stroke-width="1.5"/>
-          <line x1="78" y1="10" x2="78" y2="140" stroke="#9AA3B2" stroke-width="1.5"/>
-          <!-- y = (x−2)² − 1: 58px per x unit, 16px per y unit, origin (78, 112); exact as a quadratic Bézier -->
-          <path d="M43.20 19.84 Q194.00 236.16 344.80 19.84" fill="none" stroke="#1E63E9" stroke-width="3.5"/>
-          <circle cx="194" cy="128" r="6" fill="#E5484D"/>
-          <circle cx="136" cy="112" r="5.5" fill="#12A150"/>
-          <circle cx="252" cy="112" r="5.5" fill="#12A150"/>
-          <text x="204" y="144" font-family="Manrope" font-size="13" font-weight="800" fill="#E5484D">(2; −1)</text>
-          <text x="86" y="132" font-family="Manrope" font-size="13" font-weight="800" fill="#12A150">(1; 0)</text>
-          <text x="262" y="132" font-family="Manrope" font-size="13" font-weight="800" fill="#12A150">(3; 0)</text>
-        </svg>
-        <span class="ans">Javob: uchi (2; −1), x = 1 va x = 3</span>
+        <div class="sheetwrap"><img class="sheet" src="img/sheet-sample.jpg" alt=""></div>
+        <span class="ans">Javob: a) 9/8; b) 343/6</span>
       </div>
     </div>
   </div>
