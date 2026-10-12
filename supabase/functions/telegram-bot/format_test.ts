@@ -1,5 +1,12 @@
 import { assert, assertEquals } from "@std/assert";
-import { answerForHistory, formatText, parseSegments, sheetTranscript, splitFormatted } from "./format.ts";
+import {
+  answerForHistory,
+  formatText,
+  parseSegments,
+  sheetTranscript,
+  splitFormatted,
+  withoutInternals,
+} from "./format.ts";
 
 const plain = (text: string) => ({ text, entities: [] });
 
@@ -76,4 +83,19 @@ Deno.test("sheet transcript keeps the solution readable for follow-ups", () => {
   );
   assertEquals(sheetTranscript(null), "");
   assertEquals(sheetTranscript({ answer: { parts: [{ label: "a)", value: "9/8" }] } }), "Javob: a) 9/8");
+});
+
+Deno.test("replies about internal tooling never reach students", () => {
+  const leak = "Fayllar qabul qilindi: render_solution.py va cmunrm, cmunbx shriftlari. Lekin savol yo'q.";
+  assertEquals(
+    withoutInternals(leak, false),
+    "Savolingizni tushunmadim. Iltimos, masala rasmini yoki shartini aniqroq yuboring.",
+  );
+  assertEquals(withoutInternals("Rasm $OUTPUT_DIR ga saqlandi.\nJavob: B) 21", true), "Javob: B) 21");
+  assertEquals(withoutInternals("yechim.json tayyor", true), "");
+  assertEquals(withoutInternals("Javob: C) 70°", true), "Javob: C) 70°");
+  assertEquals(
+    withoutInternals("Javob: x = 2 (fayl emas, oddiy javob)", false),
+    "Javob: x = 2 (fayl emas, oddiy javob)",
+  );
 });

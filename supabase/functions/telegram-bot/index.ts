@@ -24,7 +24,15 @@ import {
 import { encodeBase64, sniffImageType } from "./media.ts";
 import { type Figure, type ImageData, solve } from "./solver.ts";
 import { type Message, type Target, TelegramClient, type Update } from "./telegram.ts";
-import { buildRequest, type ImageRef, isAddressed, senderOf } from "./trigger.ts";
+import {
+  buildRequest,
+  DEFAULT_FOLLOW_UP,
+  DEFAULT_QUESTION,
+  type ImageRef,
+  isAddressed,
+  isThanks,
+  senderOf,
+} from "./trigger.ts";
 
 // Provided by the Supabase Edge Runtime: keeps the worker alive for background work after responding.
 declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void };
@@ -54,6 +62,7 @@ const MSG = {
     `• Yoki masala rasmi bor xabarga javob (reply) qilib meni belgilang.\n` +
     `• Javobim bo‘yicha savolingiz bo‘lsa, shu javobga reply qilib yozing.`,
   working: "⏳ Yechilmoqda...",
+  thanks: "Arzimaydi! Yana savollar bo‘lsa, bemalol yuboring 😊",
   rateLimited: (minutes: number) =>
     `Siz bir soat ichida juda ko'p so'rov yubordingiz (${RATE_LIMIT_PER_HOUR} ta). Taxminan ${minutes} daqiqadan keyin qayta urinib ko'ring.`,
   overBudget: "Bugungi so'rovlar limiti tugadi. Iltimos, ertaga qayta urinib ko'ring.",
@@ -119,14 +128,17 @@ async function handle(updateId: number, msg: Message): Promise<void> {
 
   await sweepStale();
 
-  // A reply to one of our answers continues that conversation.
-  const thread: Turn[] = request.followUpOf ? await loadThread(chatId, request.followUpOf) : [];
-  let question = request.question;
-  if (request.followUpOf && thread.length === 0) {
-    // Not a stored answer (e.g. sent before conversations were saved): pass the replied text as context.
-    const previous = msg.reply_to_message?.text ?? msg.reply_to_message?.caption ?? "";
-    if (previous) question = `Oldingi javobing:\n${previous}\n\nMening savolim: ${question}`;
+  if (!request.image && isThanks(request.question)) {
+    await send(MSG.thanks);
+    return;
   }
+
+  // A reply to one of our answers continues that conversation. A reply to any other bot message
+  // (e.g. students replying to /help with their photo) is a fresh question.
+  const thread: Turn[] = request.followUpOf ? await loadThread(chatId, request.followUpOf) : [];
+  const question = request.followUpOf && thread.length === 0 && request.question === DEFAULT_FOLLOW_UP
+    ? DEFAULT_QUESTION
+    : request.question;
 
   const rowId = await claimUpdate({
     updateId,

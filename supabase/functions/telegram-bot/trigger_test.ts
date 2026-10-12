@@ -6,6 +6,7 @@ import {
   DEFAULT_QUESTION,
   isAddressed,
   isMentioned,
+  isThanks,
   type Request,
   senderOf,
 } from "./trigger.ts";
@@ -198,4 +199,33 @@ Deno.test("multi-line questions keep their line breaks", () => {
     entities: [{ type: "mention", offset: 0, length: 14 }],
   });
   assertEquals(question(buildRequest(m, BOT)), "1) 2x = 4\n2) 3x = 9");
+});
+
+Deno.test("thanks messages are recognized, questions are not", () => {
+  for (
+    const t of [
+      "Raxmat",
+      "rahmat!",
+      "Katta rahmat ustoz",
+      "Rahmat sizga 🙏",
+      "Спасибо",
+      "ok",
+      "Zo'r",
+      "zo‘r!",
+      "tushundim",
+      "👍",
+    ]
+  ) {
+    assertEquals(isThanks(t), true, t);
+  }
+  for (
+    const t of [
+      "Rahmat, lekin 2-qadam tushunarsiz",
+      "Soddaroq tushuntir",
+      "2x = 8",
+      "Batafsilroq tushuntiring",
+    ]
+  ) {
+    assertEquals(isThanks(t), false, t);
+  }
 });

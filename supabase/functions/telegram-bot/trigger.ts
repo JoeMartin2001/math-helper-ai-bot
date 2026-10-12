@@ -143,3 +143,11 @@ export function buildRequest(msg: Message, botUsername: string): Request {
   if (!image && !text) return { kind: "help" };
   return { kind: "solve", image, question: withQuote(msg, text || DEFAULT_QUESTION), followUpOf: null };
 }
+
+// "Thanks" / "ok" replies: answered with a short message instead of a new solution.
+const THANKS =
+  /^(?:katta\s+)?(?:ra[hx]+mat|tashakkur|minnatdorman|спасибо|спс|spasibo|thanks?|thank\s+you|ok(?:ay)?|ок|zo[r'‘’ʻ]+r|super|tushundim|👍|🙏|❤️|🤝|😊)(?:\s+(?:sizga|ustoz|katta))*[\s!.)❤️🙏👍😊]*$/iu;
+
+export function isThanks(text: string): boolean {
+  return THANKS.test(text.trim());
+}

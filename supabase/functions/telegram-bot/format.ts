@@ -133,3 +133,19 @@ export function sheetTranscript(sheet: unknown): string {
   } else if (ans.value) lines.push(`Javob: ${ans.value}`);
   return lines.join("\n");
 }
+
+// Names of the bot's own tooling, which must never reach students.
+const INTERNALS =
+  /render_solution|\.otf\b|cmun[a-z]{2}|\$?(?:INPUT|OUTPUT)_DIR|yechim\.json|container_upload|\/files\/(?:input|output)/i;
+const UNCLEAR = "Savolingizni tushunmadim. Iltimos, masala rasmini yoki shartini aniqroq yuboring.";
+
+/**
+ * Drops any reply that talks about the sandbox tooling. With a sheet, the caption falls back to the
+ * sheet's "Javob:" line (or nothing); without one, the student is asked to rephrase.
+ */
+export function withoutInternals(text: string, hasSheet: boolean): string {
+  if (!INTERNALS.test(text)) return text;
+  console.warn("Reply mentioned internal tooling; replaced it:", text.slice(0, 200));
+  if (!hasSheet) return UNCLEAR;
+  return text.split("\n").find((l) => /^\s*Javob:/.test(l) && !INTERNALS.test(l))?.trim() ?? "";
+}

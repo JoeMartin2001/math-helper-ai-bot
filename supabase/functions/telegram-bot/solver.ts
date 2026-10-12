@@ -2,6 +2,7 @@
 // figures Claude drew with the server-side code execution tool.
 
 import Anthropic from "@anthropic-ai/sdk";
+import { withoutInternals } from "./format.ts";
 import type { ImageMediaType } from "./media.ts";
 
 const MODEL = Deno.env.get("CLAUDE_MODEL") ?? "claude-opus-5-5";
@@ -75,6 +76,7 @@ Qachon rasm emas, oddiy matn:
 Suhbat:
 - O'quvchi oldingi javobingga reply qilib so'rasa, avvalgi masala va yechimga tayan; masalani qayta yuborishni so'rama. "Soddaroq tushuntir" deyilsa — kamroq qadamli, soddaroq yangi varaq chiz.
 - Rasm o'qib bo'lmaydigan darajada xira bo'lsa yoki unda masala bo'lmasa, buni xushmuomalalik bilan matnda ayt.
+- Yuklangan fayllar (render_solution.py, shriftlar), papkalar, kod va JSON — ichki vositalar. O'quvchiga ular haqida HECH QACHON yozma; xabar tushunarsiz bo'lsa, masalani aniqroq yuborishni so'ra.
 - Agar "$INPUT_DIR/render_solution.py" topilmasa, yechimni oddiy matn sifatida yoz (yuqoridagi matn qoidalari bilan).
 - Matematika va fizikaga aloqasi bo'lmagan so'rovlarga qisqa va xushmuomalalik bilan, faqat matematika va fizika masalalarida yordam bera olishingni ayt.`;
 
@@ -255,9 +257,10 @@ async function solveWith(input: SolveInput, sandboxFiles: string[]): Promise<Sol
     .trim();
 
   const { figures, sheet } = await collectOutputs(content, input.signal);
+  const reply = withoutInternals(text, figures.length > 0);
   return {
     kind: "ok",
-    text,
+    text: reply,
     figures,
     sheet,
     truncated: message.stop_reason === "max_tokens",
