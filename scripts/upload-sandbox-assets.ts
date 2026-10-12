@@ -1,8 +1,9 @@
-// Uploads the solution renderer and its fonts to the Anthropic Files API, so every request can
-// mount them into Claude's code execution sandbox. Prints the file ids to store as a secret:
+// Uploads the solution renderer and its fonts to the Anthropic Files API. The bot mounts the
+// newest upload of each file (found by name) into Claude's code execution sandbox, so no config
+// change is needed. Re-run whenever sandbox/ changes:
 //   deno run -A scripts/upload-sandbox-assets.ts
-//   supabase secrets set SANDBOX_FILE_IDS=<printed ids>
-// Re-run (and update the secret) whenever sandbox/ changes.
+// Older copies are deleted only after every new file is uploaded. A bot worker that still holds an
+// old id looks the files up again when the API reports one missing.
 import Anthropic, { toFile } from "npm:@anthropic-ai/sdk@0.133.0";
 
 const client = new Anthropic();
@@ -15,13 +16,20 @@ const files = [
   "fonts/cmunbi.otf",
 ];
 
-const ids: string[] = [];
+const uploaded = new Set<string>();
 for (const path of files) {
   const bytes = await Deno.readFile(new URL(path, root));
   const name = path.split("/").pop()!;
   const type = name.endsWith(".py") ? "text/x-python" : "font/otf";
-  const uploaded = await client.files.upload({ file: await toFile(bytes, name, { type }) });
-  console.error(`${name} -> ${uploaded.id}`);
-  ids.push(uploaded.id);
+  const file = await client.files.upload({ file: await toFile(bytes, name, { type }) });
+  console.log(`uploaded ${name} -> ${file.id}`);
+  uploaded.add(file.id);
 }
-console.log(ids.join(","));
+
+const names = new Set(files.map((p) => p.split("/").pop()!));
+for await (const f of client.files.list({ limit: 100 })) {
+  if (names.has(f.filename) && !uploaded.has(f.id)) {
+    await client.files.delete(f.id);
+    console.log(`deleted old ${f.filename} (${f.id})`);
+  }
+}

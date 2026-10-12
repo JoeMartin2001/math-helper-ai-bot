@@ -8,10 +8,9 @@ const MODEL = "claude-opus-5-5";
 const MAX_FIGURES = 3;
 // The API pauses long server-tool turns; resume at most this many times.
 const MAX_CONTINUATIONS = 3;
-// Files API ids of sandbox/render_solution.py and its fonts (see scripts/upload-sandbox-assets.ts).
-const SANDBOX_FILE_IDS = (Deno.env.get("SANDBOX_FILE_IDS") ?? "").split(",").map((s) => s.trim()).filter(
-  Boolean,
-);
+// The solution-sheet renderer and its fonts, uploaded to the Files API by
+// scripts/upload-sandbox-assets.ts and mounted into each request's sandbox ($INPUT_DIR).
+const SANDBOX_FILES = ["render_solution.py", "cmunrm.otf", "cmunbx.otf", "cmunti.otf", "cmunbi.otf"];
 
 // Kept constant so the prefix is cacheable across requests.
 const SYSTEM_PROMPT =
@@ -68,6 +67,7 @@ Qachon rasm emas, oddiy matn:
 Suhbat:
 - O'quvchi oldingi javobingga reply qilib so'rasa, avvalgi masala va yechimga tayan; masalani qayta yuborishni so'rama. "Soddaroq tushuntir" deyilsa — kamroq qadamli, soddaroq yangi varaq chiz.
 - Rasm o'qib bo'lmaydigan darajada xira bo'lsa yoki unda masala bo'lmasa, buni xushmuomalalik bilan matnda ayt.
+- Agar "$INPUT_DIR/render_solution.py" topilmasa, yechimni oddiy matn sifatida yoz (yuqoridagi matn qoidalari bilan).
 - Matematika va fizikaga aloqasi bo'lmagan so'rovlarga qisqa va xushmuomalalik bilan, faqat matematika va fizika masalalarida yordam bera olishingni ayt.`;
 
 export interface ImageData {
@@ -118,13 +118,65 @@ function userContent(question: string, image?: ImageData): Anthropic.Beta.BetaCo
   return content;
 }
 
+let sandboxIds: Promise<string[]> | null = null;
+
+/**
+ * Finds the newest upload of each sandbox file by name, so re-uploading never requires a config
+ * change. Cached per worker; returns [] (no sheet rendering) if any file is missing.
+ */
+function sandboxFileIds(refresh = false): Promise<string[]> {
+  if (!sandboxIds || refresh) {
+    sandboxIds = (async () => {
+      const newest = new Map<string, { id: string; created: string }>();
+      for await (const f of client.files.list({ limit: 100 })) {
+        const known = newest.get(f.filename);
+        if (SANDBOX_FILES.includes(f.filename) && (!known || f.created_at > known.created)) {
+          newest.set(f.filename, { id: f.id, created: f.created_at });
+        }
+      }
+      const missing = SANDBOX_FILES.filter((name) => !newest.has(name));
+      if (missing.length) {
+        console.error("Sandbox files missing from the Files API; answering without sheets:", missing);
+        return [];
+      }
+      return SANDBOX_FILES.map((name) => newest.get(name)!.id);
+    })().catch((err) => {
+      sandboxIds = null; // try again on the next request
+      console.error("Could not list sandbox files", err);
+      return [];
+    });
+  }
+  return sandboxIds;
+}
+
+/** The API rejected a request because a mounted file no longer exists (e.g. it was re-uploaded). */
+function isMissingFile(err: unknown): boolean {
+  return err instanceof Anthropic.NotFoundError && /File `file_/.test(err.message);
+}
+
 export async function solve(input: SolveInput): Promise<SolveResult> {
+  let ids = await sandboxFileIds();
+  for (let attempt = 0;; attempt++) {
+    try {
+      return await solveWith(input, ids);
+    } catch (err) {
+      if (!isMissingFile(err) || attempt >= 2) throw err;
+      // Look the files up again; if that still fails, answer without the sheet renderer.
+      console.warn(
+        "Sandbox file missing, retrying",
+        attempt === 0 ? "with fresh file ids" : "without sheets",
+      );
+      ids = attempt === 0 ? await sandboxFileIds(true) : [];
+    }
+  }
+}
+
+async function solveWith(input: SolveInput, sandboxFiles: string[]): Promise<SolveResult> {
   const messages: Anthropic.Beta.BetaMessageParam[] = input.history.flatMap((turn) => [
     { role: "user" as const, content: userContent(turn.question, turn.image) },
     { role: "assistant" as const, content: turn.answer },
   ]);
-  // Mount the solution-sheet renderer and its fonts into this request's sandbox ($INPUT_DIR).
-  const uploads = SANDBOX_FILE_IDS.map((id) => ({ type: "container_upload" as const, file_id: id }));
+  const uploads = sandboxFiles.map((id) => ({ type: "container_upload" as const, file_id: id }));
   messages.push({ role: "user", content: [...uploads, ...userContent(input.question, input.image)] });
 
   let inputTokens = 0;

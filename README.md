@@ -83,11 +83,11 @@ How it works:
 3. The bot sends the resulting `yechim-N.png` pages as a photo, or as an album when there is more than one page. It keeps the JSON as the text of the answer, so follow-up questions have context.
 4. Short chat, such as thanks or a quick clarification, gets a plain text answer.
 
-After editing anything in `sandbox/`, upload it again and point the bot at the new files:
+After editing anything in `sandbox/`, upload it again:
 ```bash
-deno run -A scripts/upload-sandbox-assets.ts   # prints SANDBOX_FILE_IDS
-supabase secrets set SANDBOX_FILE_IDS=<ids>
+deno run -A scripts/upload-sandbox-assets.ts
 ```
+The bot always uses the newest upload of each file, found by file name, so there is nothing to reconfigure. If the files are ever missing, the bot answers in plain text instead of failing.
 To preview the renderer locally (with matplotlib 3.10 installed), run `SOLUTION_FONTS=sandbox/fonts python sandbox/render_solution.py solution.json out/`.
 
 ## Notes
